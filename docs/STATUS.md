@@ -35,8 +35,8 @@ next to each one. The README's Results section is regenerated from the same file
 | Results table | `scripts/make_results.py` wrote `outputs/results.csv`; the accuracy row is filled, the latency, size and robustness rows say "not measured" until their runs finish. |
 | Benchmark | `python -m src.benchmark`: 200 timed runs completed, `outputs/benchmark.json`. |
 | Robustness script | Run end to end on a trial model with two clips. The full run was in progress. |
-| Live demo loop | `python demo/live.py --source <clip> --no-window` processed clips and printed captions, using a trial model. It was not rerun with the trained model (that would have disturbed the latency benchmark), and nobody has yet tried it at a webcam. |
-| Tests | `python -m pytest -q`: 30 passed on the last full run. After the final small refactors the 24 non-INT8 tests were rerun and passed; the 6 INT8 tests should be rerun once the machine is idle. |
+| Live demo loop | `python demo/live.py --source <clip> --no-window` with the trained model on three test clips (07072, 17713, 12306) printed the correct captions: book, drink, computer. Nobody has yet tried it at a webcam, and a single-sign clip does not exercise the hold-and-switch behaviour. |
+| Tests | `python -m pytest -q`: 30 passed, on the final code. |
 
 ## Measured numbers
 
@@ -161,7 +161,7 @@ the brief's 50 ms means is an open question to the organisers.
 | `make_results.py` writes `results.csv` and computes the pass column | **Done** for accuracy, latency and size. The robustness row is filled when the unattended run ends. |
 | Measured top-1 and top-5 on the WLASL100 test split | **Done:** INT8 82.56 % / 93.41 %, both on cached landmarks and through `predict()`. |
 | Measured p95 latency, split into landmark extraction and classification | **Done** (table above). Worth rerunning on a cool, idle machine. |
-| Webcam demo with caption overlay, and the recorded demo video | **Code done**, tested headless on video files. A human still has to try the webcam. The recorded video is out of scope for this build. |
+| Webcam demo with caption overlay, and the recorded demo video | **Code done**, and correct on three test clips played through it headless. A human still has to try the webcam. The recorded video is out of scope for this build. |
 | README with setup, commands and the stated vocabulary assumption | **Done**, with diagrams and an AI-assistance line. |
 | PPT on the organisers' template | Out of scope for this build. |
 
