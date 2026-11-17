@@ -1,7 +1,7 @@
 metric,target,value,unit,pass,notes
 top1_accuracy,>= 70 %,82.56,%,PASS,INT8 model via predict() on all 258 clips of the WLASL100 test split; top-5 = 93.41 %
-latency_p95,<= 50 ms,not measured,ms,not measured,run python -m src.benchmark
-model_size,<= 25 MB,not measured,MB,not measured,run python -m src.benchmark
+latency_p95,<= 50 ms,3407.89,ms,FAIL,"value = whole clip incl. landmarks (config.LATENCY_METRIC_FOR_RESULTS). All p95 over 200 runs: classifier call 2.38 ms; landmarks per frame 66.61 ms; whole clip 3407.89 ms (55 frames). Device: 12th Gen Intel(R) Core(TM) i7-12650H, LiteRT (ai-edge-litert 2.3.0), CPU, XNNPACK delegate"
+model_size,<= 25 MB,15.42,MB,PASS,sum of every model file loaded (classifier_int8 1.82; mediapipe_hand_landmarker 7.82; mediapipe_pose_landmarker_lite 5.78); pass is judged against our stricter 20 MB design budget
 accuracy_drop_robustness,<= 5 points,not measured,points,not measured,run python -m src.robustness (needs the dataset)
 avg_power,<= 500 mW,not measured,mW,not measured,needs an on-phone run (Android stretch goal not built); not estimated
 thermal_drift_10min,<= 20 %,not measured,%,not measured,needs an on-phone run (Android stretch goal not built); not estimated

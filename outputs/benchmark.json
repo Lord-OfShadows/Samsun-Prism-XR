@@ -1,0 +1,91 @@
+{
+ "device": {
+  "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+  "os": "Windows-10-10.0.26300-SP0",
+  "python": "3.11.18",
+  "runtime": "LiteRT (ai-edge-litert 2.3.0), CPU, XNNPACK delegate",
+  "mediapipe": "1.2.3"
+ },
+ "size": {
+  "files_bytes": {
+   "classifier_int8": 1822904,
+   "mediapipe_hand_landmarker": 7819105,
+   "mediapipe_pose_landmarker_lite": 5777746
+  },
+  "total_mb": 15.42,
+  "budget_mb": 20.0,
+  "within_budget": true,
+  "classifier_only_mb": 1.823,
+  "unit": "MB = 1,000,000 bytes"
+ },
+ "classifier_only_ms": {
+  "p50": 2.357,
+  "p95": 2.378,
+  "mean": 2.359,
+  "min": 2.345,
+  "max": 2.401,
+  "runs": 200
+ },
+ "classifier_threads": 1,
+ "end_to_end_ms": {
+  "decode": {
+   "p50": 21.035,
+   "p95": 36.819,
+   "mean": 22.733,
+   "min": 10.58,
+   "max": 63.661,
+   "runs": 200
+  },
+  "landmarks": {
+   "p50": 2846.034,
+   "p95": 3378.494,
+   "mean": 2763.882,
+   "min": 1836.142,
+   "max": 3893.587,
+   "runs": 200
+  },
+  "normalize": {
+   "p50": 0.882,
+   "p95": 1.456,
+   "mean": 0.925,
+   "min": 0.472,
+   "max": 1.754,
+   "runs": 200
+  },
+  "classifier": {
+   "p50": 4.288,
+   "p95": 6.065,
+   "mean": 4.191,
+   "min": 2.356,
+   "max": 7.081,
+   "runs": 200
+  },
+  "total": {
+   "p50": 2869.722,
+   "p95": 3407.886,
+   "mean": 2791.731,
+   "min": 1851.304,
+   "max": 3920.764,
+   "runs": 200
+  },
+  "per_frame_landmarks": {
+   "p50": 52.887,
+   "p95": 66.609,
+   "mean": 53.762,
+   "min": 42.786,
+   "max": 80.586,
+   "runs": 200
+  }
+ },
+ "frames_per_clip": {
+  "p50": 55.0,
+  "p95": 64.0,
+  "mean": 52.55,
+  "min": 28.0,
+  "max": 64.0,
+  "runs": 200
+ },
+ "clips_timed": 20,
+ "warmup_runs": 10,
+ "latency_budget_ms": 50.0
+}
