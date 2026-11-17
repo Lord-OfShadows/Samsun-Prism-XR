@@ -1,4 +1,5 @@
 """Paths and constants shared by every module. Change things here, not in the scripts."""
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,8 +23,11 @@ ROBUSTNESS_DIR = ROOT / "data" / "robustness"  # cached landmarks of perturbed t
 
 MODELS_DIR = ROOT / "models"
 FLOAT_MODEL = MODELS_DIR / "echogesture_float.keras"   # what train.py saves
-INT8_MODEL = MODELS_DIR / "echogesture_int8.tflite"    # what predict() loads
-OUTPUT_DIR = ROOT / "outputs"
+# The two environment variables exist for trying out another model without touching the
+# shipped one or its reported numbers, e.g.
+#   ECHOGESTURE_INT8_MODEL=other.tflite ECHOGESTURE_OUTPUT_DIR=outputs_other python -m src.benchmark
+INT8_MODEL = Path(os.environ.get("ECHOGESTURE_INT8_MODEL", MODELS_DIR / "echogesture_int8.tflite"))  # what predict() loads
+OUTPUT_DIR = Path(os.environ.get("ECHOGESTURE_OUTPUT_DIR", ROOT / "outputs"))
 
 SEQ_LEN = 64        # frames the classifier sees (PRD)
 FEATURE_CLIP = 3.0  # every feature is clipped to [-3, 3]: gives INT8 a fixed, known input range

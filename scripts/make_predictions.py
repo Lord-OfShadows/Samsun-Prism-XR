@@ -43,6 +43,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="test")
     ap.add_argument("--workers", type=int, default=1)
+    ap.add_argument("--limit", type=int, help="only the first N clips (quick check; not a full result)")
     ap.add_argument("--out", default=str(config.OUTPUT_DIR / "predictions.jsonl"))
     args = ap.parse_args()
 
@@ -50,7 +51,7 @@ def main():
     df = df[df.split == args.split].sort_values("video_id")
     if df.empty:
         sys.exit(f"no '{args.split}' clips in the manifest")
-    jobs = list(zip(df.video_id, df.path))
+    jobs = list(zip(df.video_id, df.path))[:args.limit]
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
 
     pool = Pool(args.workers) if args.workers > 1 else None
