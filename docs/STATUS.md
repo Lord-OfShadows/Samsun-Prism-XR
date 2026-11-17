@@ -149,7 +149,7 @@ the brief's 50 ms means is an open question to the organisers.
 
 - `models/echogesture_float.keras` is 19.3 MB because it includes the optimizer state. Saving it without the optimizer would bring it to about 6 MB. It is only needed to rerun `src/convert.py`; the shipped model is the 1.82 MB INT8 file.
 - The landmark zip for teammates (`data/share/echogesture_wlasl100_landmarks.zip`, 80.7 MB) exists only on the build machine. Send it to the team directly.
-- The PRD PDF in `docs/` is not committed (public repo).
+- The PRD PDF in `docs/` was committed by mistake and then removed from the tree; it is still in the git history (`docs/BLOCKED.md` #8).
 
 ## PRD Core checklist
 

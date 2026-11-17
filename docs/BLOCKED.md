@@ -31,7 +31,7 @@ python scripts/pack_landmarks.py --unpack path\to\echogesture_wlasl100_landmarks
 | 5 | **Which latency the 50 ms ceiling means.** | Open question to the organisers. | `results.csv` reports the whole-clip figure by default. Change `LATENCY_METRIC_FOR_RESULTS` in `src/config.py` if they confirm per-frame or per-classifier-call, then rerun `python scripts/make_results.py`. |
 | 6 | **GPU training.** | TensorFlow has no GPU support on native Windows and MediaPipe's Python package has none on Windows either. Not needed: training takes well under an hour on CPU. | Only if wanted: train inside WSL2 or on Colab with the landmark zip. |
 | 7 | **Sharing the landmark zip.** | 80.7 MB, too large for git, and WLASL's licence is for computational use only, so it was not uploaded anywhere public. | The file is at `data/share/echogesture_wlasl100_landmarks.zip` on the machine that built it. Send it to teammates directly (Drive, USB). |
-| 8 | **PRD in the repo.** | The PRD exists only as a PDF in `docs/` and was left uncommitted because the repository is public. | Commit it if the team is happy for it to be public. |
+| 8 | **PRD in the repo.** | The PRD exists only as a PDF in `docs/`. It was meant to stay uncommitted because the repository is public, but it was committed by mistake (commit `4fb4ad6`) and removed from the tree in a later commit. It is still retrievable from the git history. `docs/*.pdf` is now git-ignored. | Decide: either re-add it deliberately (remove the ignore line), or have the history rewritten to purge it, which needs a force-push to `main`. |
 
 ## Out of scope for this build (not blocked, just not done)
 
