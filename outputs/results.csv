@@ -1,0 +1,7 @@
+metric,target,value,unit,pass,notes
+top1_accuracy,>= 70 %,82.56,%,PASS,INT8 model via predict() on all 258 clips of the WLASL100 test split; top-5 = 93.41 %
+latency_p95,<= 50 ms,not measured,ms,not measured,run python -m src.benchmark
+model_size,<= 25 MB,not measured,MB,not measured,run python -m src.benchmark
+accuracy_drop_robustness,<= 5 points,not measured,points,not measured,run python -m src.robustness (needs the dataset)
+avg_power,<= 500 mW,not measured,mW,not measured,needs an on-phone run (Android stretch goal not built); not estimated
+thermal_drift_10min,<= 20 %,not measured,%,not measured,needs an on-phone run (Android stretch goal not built); not estimated

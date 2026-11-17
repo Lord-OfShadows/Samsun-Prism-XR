@@ -1,4 +1,5 @@
 """Paths and constants shared by every module. Change things here, not in the scripts."""
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,14 +14,20 @@ HAND_MODEL = MP_MODELS_DIR / "hand_landmarker.task"
 # fastest of the three pose variants, which matters for both the size and latency budgets.
 POSE_MODEL = MP_MODELS_DIR / "pose_landmarker_lite.task"
 
+WLASL_DIR = ROOT / "data" / "wlasl"           # scripts/get_wlasl100.py downloads into here
+WLASL_JSON = WLASL_DIR / "WLASL_v0.3.json"
+VIDEO_DIR = WLASL_DIR / "videos"              # <video_id>.mp4
 LANDMARK_DIR = ROOT / "data" / "landmarks"   # one .npz per clip
 MANIFEST_PATH = ROOT / "data" / "manifest.csv"
 ROBUSTNESS_DIR = ROOT / "data" / "robustness"  # cached landmarks of perturbed test clips
 
 MODELS_DIR = ROOT / "models"
 FLOAT_MODEL = MODELS_DIR / "echogesture_float.keras"   # what train.py saves
-INT8_MODEL = MODELS_DIR / "echogesture_int8.tflite"    # what predict() loads
-OUTPUT_DIR = ROOT / "outputs"
+# The two environment variables exist for trying out another model without touching the
+# shipped one or its reported numbers, e.g.
+#   ECHOGESTURE_INT8_MODEL=other.tflite ECHOGESTURE_OUTPUT_DIR=outputs_other python -m src.benchmark
+INT8_MODEL = Path(os.environ.get("ECHOGESTURE_INT8_MODEL", MODELS_DIR / "echogesture_int8.tflite"))  # what predict() loads
+OUTPUT_DIR = Path(os.environ.get("ECHOGESTURE_OUTPUT_DIR", ROOT / "outputs"))
 
 SEQ_LEN = 64        # frames the classifier sees (PRD)
 FEATURE_CLIP = 3.0  # every feature is clipped to [-3, 3]: gives INT8 a fixed, known input range

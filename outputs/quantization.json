@@ -1,0 +1,25 @@
+{
+ "float_model_bytes": 19309580,
+ "int8_model_bytes": 1822904,
+ "representative_clips": 300,
+ "float_tensors_left": 0,
+ "parameters": 1586596,
+ "input_scale": 0.0235294122248888,
+ "input_zero_point": -1,
+ "val": {
+  "clips": 338,
+  "float_top1": 0.8520710059171598,
+  "int8_top1": 0.8520710059171598,
+  "float_top5": 0.9497041420118343,
+  "int8_top5": 0.9437869822485208,
+  "same_top1_prediction": 0.9911242603550295
+ },
+ "test": {
+  "clips": 258,
+  "float_top1": 0.8333333333333334,
+  "int8_top1": 0.8255813953488372,
+  "float_top5": 0.937984496124031,
+  "int8_top5": 0.9341085271317829,
+  "same_top1_prediction": 0.9883720930232558
+ }
+}
