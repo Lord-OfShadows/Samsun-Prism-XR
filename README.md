@@ -174,9 +174,20 @@ Defaults: threshold 0.6, hold 1.5 s, in [`src/config.py`](src/config.py).
 <!-- RESULTS:START -->
 Not generated yet: run `python scripts/make_results.py`.
 
-### Accuracy
+### Accuracy: float model against INT8 (`outputs/quantization.json`)
 
-Not generated yet: run `python -m src.train` then `python -m src.convert`.
+Measured on cached landmarks of the official WLASL100 splits. Every clip in the split counts, including clips where no hand was found.
+
+| Split | Clips | Float top-1 | INT8 top-1 | Float top-5 | INT8 top-5 | Same top word |
+|---|---|---|---|---|---|---|
+| val | 338 | 85.21 % | 85.21 % | 94.97 % | 94.38 % | 99.11 % |
+| test | 258 | 83.33 % | 82.56 % | 93.80 % | 93.41 % | 98.84 % |
+
+- Parameters: 1,586,596
+- Float model file: 19.31 MB; INT8 model file: 1.82 MB
+- Float tensors left in the INT8 model: 0 (0 means fully integer)
+- Representative set: 300 training clips
+- Training: 1441 clips, best validation epoch 190 of 250 run, 38 minutes on CPU
 
 ### Latency and size
 
