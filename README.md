@@ -172,7 +172,25 @@ Defaults: threshold 0.6, hold 1.5 s, in [`src/config.py`](src/config.py).
 ## Results
 
 <!-- RESULTS:START -->
-Not generated yet: run `python scripts/make_results.py`.
+### Organisers' results table (`outputs/results.csv`)
+
+| Metric | Target | Measured | Pass |
+|---|---|---|---|
+| `top1_accuracy` | >= 70 % | 82.56 % | PASS |
+| `latency_p95` | <= 50 ms | not measured | not measured |
+| `model_size` | <= 25 MB | not measured | not measured |
+| `accuracy_drop_robustness` | <= 5 points | not measured | not measured |
+| `avg_power` | <= 500 mW | not measured | not measured |
+| `thermal_drift_10min` | <= 20 % | not measured | not measured |
+
+Notes per row:
+
+- `top1_accuracy`: INT8 model via predict() on all 258 clips of the WLASL100 test split; top-5 = 93.41 %
+- `latency_p95`: run python -m src.benchmark
+- `model_size`: run python -m src.benchmark
+- `accuracy_drop_robustness`: run python -m src.robustness (needs the dataset)
+- `avg_power`: needs an on-phone run (Android stretch goal not built); not estimated
+- `thermal_drift_10min`: needs an on-phone run (Android stretch goal not built); not estimated
 
 ### Accuracy: float model against INT8 (`outputs/quantization.json`)
 

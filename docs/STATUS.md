@@ -13,8 +13,11 @@ next to each one. The README's Results section is regenerated from the same file
   Float model: top-1 83.33 %, top-5 93.80 %. Quantization cost 0.78 points of top-1.
   Source: `python -m src.convert` -> `outputs/quantization.json`.
 - INT8 classifier file: **1.82 MB**, fully integer (0 float tensors left).
-- **Still running unattended when this was written:** predictions through `predict()`,
-  the latency benchmark, the robustness evaluation and `results.csv`. See "What is left".
+- The same test clips through `predict()` on the video files: **top-1 82.56 %, top-5
+  93.41 %**, 258 of 258 clips answered, 0 errors. Source: `scripts/make_predictions.py` ->
+  `outputs/predictions.jsonl`, scored by `scripts/make_results.py`.
+- **Still running unattended when this was written:** the latency benchmark and the
+  robustness evaluation, after which `results.csv` is rewritten. See "What is left".
 
 ## What works (run and verified)
 
@@ -26,8 +29,9 @@ next to each one. The README's Results section is regenerated from the same file
 | Normalisation, augmentation | Unit tests in `tests/test_normalize.py` (position and distance invariance, masking, mirroring). |
 | Model and training | `python -m src.train`: 1,586,596 parameters, 250 epochs, best validation epoch 190. Log: `outputs/train_log.json`. |
 | INT8 conversion | `python -m src.convert`: attention layers converted cleanly; no fallback architecture needed, no quantization-aware training needed (drop under 2 points). |
-| `predict()` | Returns valid JSON on real clips, offline. Run end to end; full test-split run in progress. |
-| Benchmark, robustness, results scripts | Each run end to end on a trial model with a few clips, outputs sent to a temp folder. Full runs in progress. |
+| `predict()` | Returned valid JSON for all 258 test clips, offline, 0 errors (`outputs/predictions.jsonl`). |
+| Results table | `scripts/make_results.py` wrote `outputs/results.csv`; the accuracy row is filled, the latency, size and robustness rows say "not measured" until their runs finish. |
+| Benchmark, robustness scripts | Each run end to end on a trial model with a few clips, outputs sent to a temp folder. Full runs in progress. |
 | Live demo loop | `python demo/live.py --source <clip> --no-window` processes a clip and prints captions. Not yet seen by a human at a webcam. |
 | Tests | `python -m pytest -q`: 30 passed on the last full run. After the final small refactors the 24 non-INT8 tests were rerun and passed; the 6 INT8 tests should be rerun once the machine is idle. |
 
@@ -53,10 +57,9 @@ Every clip in the split counts, including the one validation clip with no hand f
 | val | 338 | 85.21 % | 85.21 % | 94.97 % | 94.38 % | 99.11 % |
 | test | 258 | 83.33 % | 82.56 % | 93.80 % | 93.41 % | 98.84 % |
 
-These are measured on the cached landmarks. The figure that goes into `results.csv` is
-measured a second way, by calling `predict()` on each test video file; it can differ by a
-clip or two because `predict()` uses the whole file while the cache applies WLASL's frame
-bounds to a few clips (see `docs/ASSUMPTIONS.md` #18).
+These are measured on the cached landmarks. The figure in `results.csv` is measured a
+second way, by calling `predict()` on each test video file, and came out the same:
+82.56 % top-1 and 93.41 % top-5 on the test split.
 
 One training run, one seed. No hyperparameter tuning was done, so the test number is not
 tuned to the test set, but its run-to-run spread is unknown.
@@ -86,12 +89,13 @@ They are written as "not measured" in `results.csv`.
 
 ### 1. Collect the unattended run (first thing to do)
 
-A pipeline was left running: predictions -> benchmark -> robustness -> results -> readme.
+A pipeline was left running. Predictions are finished and committed; still to come are
+benchmark -> robustness -> results -> readme.
 Its log is `logs/pipeline.log`. When it has finished (the last line says `readme done`):
 
 ```
 git add outputs README.md
-git commit -m "Add predictions, benchmark, robustness and results"
+git commit -m "Add benchmark, robustness and final results"
 git push origin core-mvp
 ```
 
@@ -129,11 +133,11 @@ organisers.
 
 | Core requirement | State |
 |---|---|
-| `predict()` returns valid JSON for any clip in the test manifest, with no network access | **Working.** Offline by construction; run on real clips. The run over all 258 test clips was in progress. |
+| `predict()` returns valid JSON for any clip in the test manifest, with no network access | **Done.** All 258 test clips answered, 0 errors, models loaded from local files only. |
 | INT8 `.tflite` model and `convert.py` in the repo | **Done.** |
-| `make_predictions.py` writes `predictions.jsonl` with every clip ID present | **Script done and trial-run**; full run in progress. Failed clips still get a line. |
-| `make_results.py` writes `results.csv` and computes the pass column | **Script done and trial-run**; final file is written at the end of the unattended run. |
-| Measured top-1 and top-5 on the WLASL100 test split | **Done:** INT8 82.56 % / 93.41 %. |
+| `make_predictions.py` writes `predictions.jsonl` with every clip ID present | **Done.** 258 lines for 258 clips. A clip that failed would still get a line. |
+| `make_results.py` writes `results.csv` and computes the pass column | **Done for accuracy.** The latency, size and robustness rows are filled when the unattended run ends. |
+| Measured top-1 and top-5 on the WLASL100 test split | **Done:** INT8 82.56 % / 93.41 %, both on cached landmarks and through `predict()`. |
 | Measured p95 latency, split into landmark extraction and classification | **Script done and trial-run**; 200-run measurement in progress. Rerun on a cool machine. |
 | Webcam demo with caption overlay, and the recorded demo video | **Code done**, tested headless on video files. A human still has to try the webcam. The recorded video is out of scope for this build. |
 | README with setup, commands and the stated vocabulary assumption | **Done**, with diagrams and an AI-assistance line. |
