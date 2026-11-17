@@ -9,7 +9,12 @@ Out: dict with
 Coordinates are in pixels of the processed frame (x*W, y*H, z*W) so x and y share one
 scale even on non-square video. Missing hands / no person = NaN.
 
-Deliberately NOT done here: centring, scaling, zero-filling, resampling to 64 frames.
+Clips longer than 64 frames are uniformly subsampled to 64 BEFORE MediaPipe runs: the
+classifier only ever sees 64 frames, so running the landmarkers on more is wasted latency.
+The same cap is used when caching the dataset and inside predict(), so training and
+inference see identically sampled clips.
+
+Deliberately NOT done here: centring, scaling, zero-filling, stretching short clips to 64.
 That is normalize.py. Extraction is the slow step; keeping it "raw" means we can change
 the normalisation later without re-running MediaPipe over 2,000 videos.
 """
@@ -24,11 +29,10 @@ from mediapipe.tasks.python.core.base_options import BaseOptions
 N_HAND_PTS, N_POSE_PTS = 21, 33
 POSE_L_WRIST, POSE_R_WRIST = 15, 16   # MediaPipe pose indices; "left" = the signer's left
 
-MAX_FRAMES = 192   # cap per clip; WLASL signs are a few seconds, this only bites on long clips
+MAX_FRAMES = 64    # = config.SEQ_LEN: frames per clip that reach MediaPipe (see docstring)
 MAX_SIDE = 640     # downscale big frames first: MediaPipe resizes internally anyway, and
                    # converting a 1280x720 frame costs time for no landmark gain
-# 0.5 is MediaPipe's default. WLASL is low-res and blurry, so we may lower these if the
-# five-clip test shows many frames with no hand found. Decide from the numbers, not now.
+# 0.5 is MediaPipe's default. Measured on WLASL100 with 0.5: see outputs/extraction_report.md.
 HAND_DET_CONF = 0.5
 POSE_DET_CONF = 0.5
 
@@ -72,6 +76,16 @@ def read_frames(path, frame_start=None, frame_end=None, max_frames=MAX_FRAMES):
     return frames, np.asarray(idx, np.int32), fps, mode
 
 
+def shrink(frames, max_side=MAX_SIDE):
+    """Downscale frames whose longer side exceeds max_side (no-op for small video)."""
+    h, w = frames[0].shape[:2]
+    if max(h, w) <= max_side:
+        return frames
+    s = max_side / max(h, w)
+    return [cv2.resize(f, (round(w * s), round(h * s)), interpolation=cv2.INTER_AREA)
+            for f in frames]
+
+
 def assign_hands(wrists, labels, pose_wrists):
     """Decide which detected hand is the signer's left (slot 0) and right (slot 1).
 
@@ -105,6 +119,57 @@ def assign_hands(wrists, labels, pose_wrists):
     return slots
 
 
+class FrameLandmarker:
+    """Both landmarkers for ONE continuous stream of frames (a clip, or the webcam).
+
+    VIDEO mode tracks hands between frames instead of re-detecting every frame, which is
+    faster and less jittery. Its tracking state must not leak from one clip into the next,
+    so a new FrameLandmarker is built per clip (small fixed cost). Use as a context manager.
+    """
+
+    def __init__(self, hand_model, pose_model):
+        self.hand = vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=str(hand_model)),
+            running_mode=vision.RunningMode.VIDEO, num_hands=2,
+            min_hand_detection_confidence=HAND_DET_CONF))
+        self.pose = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=str(pose_model)),
+            running_mode=vision.RunningMode.VIDEO, num_poses=1,
+            min_pose_detection_confidence=POSE_DET_CONF))
+        self._last_ts = -1
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.hand.close()
+        self.pose.close()
+
+    def process(self, frame_bgr, ts_ms):
+        """One frame -> (hands (2, 21, 3), pose (33, 4)) in pixels, NaN where not found."""
+        hands = np.full((2, N_HAND_PTS, 3), np.nan, np.float32)
+        pose = np.full((N_POSE_PTS, 4), np.nan, np.float32)
+        h, w = frame_bgr.shape[:2]
+        rgb = np.ascontiguousarray(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB))
+        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        ts = max(int(ts_ms), self._last_ts + 1)   # VIDEO mode needs strictly increasing ms
+        self._last_ts = ts
+
+        pr = self.pose.detect_for_video(image, ts)
+        if pr.pose_landmarks:
+            pose[:] = [[p.x * w, p.y * h, p.z * w, p.visibility or 0.0]
+                       for p in pr.pose_landmarks[0]]
+
+        hr = self.hand.detect_for_video(image, ts)
+        pts = [np.array([[p.x * w, p.y * h, p.z * w] for p in lms], np.float32)
+               for lms in hr.hand_landmarks]
+        labels = [c[0].category_name for c in hr.handedness]
+        pose_wrists = pose[[POSE_L_WRIST, POSE_R_WRIST], :2]
+        for k, slot in enumerate(assign_hands([p[0, :2] for p in pts], labels, pose_wrists)):
+            hands[slot] = pts[k]
+        return hands, pose
+
+
 class LandmarkExtractor:
     """Runs both landmarkers over one clip. Create once per worker process, reuse per clip."""
 
@@ -114,58 +179,25 @@ class LandmarkExtractor:
                 raise FileNotFoundError(f"{p} missing; run scripts/get_mediapipe_models.py")
         self.hand_model, self.pose_model = str(hand_model), str(pose_model)
 
-    def _landmarkers(self):
-        # VIDEO mode tracks hands between frames instead of re-detecting every frame,
-        # which is faster and less jittery. Its tracking state must not leak from one clip
-        # into the next, so we build fresh landmarkers per clip (small fixed cost).
-        hand = vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=self.hand_model),
-            running_mode=vision.RunningMode.VIDEO, num_hands=2,
-            min_hand_detection_confidence=HAND_DET_CONF))
-        pose = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=self.pose_model),
-            running_mode=vision.RunningMode.VIDEO, num_poses=1,
-            min_pose_detection_confidence=POSE_DET_CONF))
-        return hand, pose
+    def stream(self):
+        """A fresh FrameLandmarker (one per clip / per webcam session)."""
+        return FrameLandmarker(self.hand_model, self.pose_model)
 
     def extract_frames(self, frames_bgr, fps):
         T = len(frames_bgr)
         hands = np.full((T, 2, N_HAND_PTS, 3), np.nan, np.float32)
         pose = np.full((T, N_POSE_PTS, 4), np.nan, np.float32)
-        hand_lm, pose_lm = self._landmarkers()
-        with hand_lm, pose_lm:
-            last_ts = -1
+        with self.stream() as fl:
             for t, frame in enumerate(frames_bgr):
-                h, w = frame.shape[:2]
-                rgb = np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                ts = max(int(t * 1000 / fps), last_ts + 1)   # VIDEO mode needs strictly increasing ms
-                last_ts = ts
-
-                pr = pose_lm.detect_for_video(image, ts)
-                if pr.pose_landmarks:
-                    pose[t] = [[p.x * w, p.y * h, p.z * w, p.visibility or 0.0]
-                               for p in pr.pose_landmarks[0]]
-
-                hr = hand_lm.detect_for_video(image, ts)
-                pts = [np.array([[p.x * w, p.y * h, p.z * w] for p in lms], np.float32)
-                       for lms in hr.hand_landmarks]
-                labels = [c[0].category_name for c in hr.handedness]
-                pose_wrists = pose[t, [POSE_L_WRIST, POSE_R_WRIST], :2]
-                for k, slot in enumerate(assign_hands([p[0, :2] for p in pts], labels, pose_wrists)):
-                    hands[t, slot] = pts[k]
+                hands[t], pose[t] = fl.process(frame, int(t * 1000 / fps))
         return hands, pose
 
     def extract(self, video_path, frame_start=None, frame_end=None):
         frames, idx, fps, mode = read_frames(video_path, frame_start, frame_end)
         if not frames:
             raise IOError(f"no frames decoded from {video_path}")
+        frames = shrink(frames)
         h, w = frames[0].shape[:2]
-        if max(h, w) > MAX_SIDE:
-            s = MAX_SIDE / max(h, w)
-            frames = [cv2.resize(f, (round(w * s), round(h * s)), interpolation=cv2.INTER_AREA)
-                      for f in frames]
-            h, w = frames[0].shape[:2]
         hands, pose = self.extract_frames(frames, fps)
         return {"hands": hands, "pose": pose, "frame_idx": idx, "fps": np.float32(fps),
                 "width": np.int32(w), "height": np.int32(h), "bounds_mode": mode,

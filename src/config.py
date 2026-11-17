@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # The vocabulary: one gloss per line, line number = class index.
-# Retraining on another word list = replace this file and rerun extraction + training.
+# Retraining on another word list = replace this file and rerun scripts/run_all.py.
 VOCAB_PATH = ROOT / "configs" / "vocab.txt"
 
 MP_MODELS_DIR = ROOT / "models" / "mediapipe"
@@ -15,5 +15,29 @@ POSE_MODEL = MP_MODELS_DIR / "pose_landmarker_lite.task"
 
 LANDMARK_DIR = ROOT / "data" / "landmarks"   # one .npz per clip
 MANIFEST_PATH = ROOT / "data" / "manifest.csv"
+ROBUSTNESS_DIR = ROOT / "data" / "robustness"  # cached landmarks of perturbed test clips
 
-SEQ_LEN = 64  # frames the classifier sees (PRD). Resampling happens in normalize.py, not here.
+MODELS_DIR = ROOT / "models"
+FLOAT_MODEL = MODELS_DIR / "echogesture_float.keras"   # what train.py saves
+INT8_MODEL = MODELS_DIR / "echogesture_int8.tflite"    # what predict() loads
+OUTPUT_DIR = ROOT / "outputs"
+
+SEQ_LEN = 64        # frames the classifier sees (PRD)
+FEATURE_CLIP = 3.0  # every feature is clipped to [-3, 3]: gives INT8 a fixed, known input range
+
+SIZE_BUDGET_MB = 20.0     # the brief says 20 in one place and 25 in another; we design for 20
+LATENCY_BUDGET_MS = 50.0
+# Which measured latency goes in the single latency_p95 row of results.csv:
+# "end_to_end" (whole clip incl. landmarks, the strictest reading), "per_frame" or "classifier".
+# All three are always measured and written to outputs/benchmark.json and the notes column.
+LATENCY_METRIC_FOR_RESULTS = "end_to_end"
+
+# Live demo caption behaviour
+CAPTION_THRESHOLD = 0.6   # show a word only above this confidence
+CAPTION_HOLD_S = 1.5      # and keep it on screen at least this long
+
+
+def load_vocab(path=None):
+    """Class index -> word. The ONLY place the word list is read."""
+    p = Path(path) if path else VOCAB_PATH
+    return [g.strip() for g in p.read_text(encoding="utf-8").splitlines() if g.strip()]
