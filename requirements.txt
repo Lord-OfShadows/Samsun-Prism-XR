@@ -1,0 +1,14 @@
+# Python 3.11 (keras 3.15, pulled in by tensorflow 2.21, needs >= 3.11).
+# Pinned so the jury's machine gets the same versions we measured with.
+
+mediapipe==1.2.3          # Tasks API only; the old mp.solutions API no longer exists in 1.x
+# mediapipe installs opencv-contrib-python itself. Do NOT also install opencv-python:
+# two packages providing cv2 overwrite each other and break imports.
+numpy>=1.26
+pandas>=2.0
+tqdm>=4.66
+pytest>=8.0
+
+# Needed from the model step onward (installed now so setup happens once):
+tensorflow==2.21.0        # training + TFLiteConverter for the INT8 export
+ai-edge-litert==2.3.0     # LiteRT interpreter used by predict(); tf.lite.Interpreter is being retired

@@ -1,0 +1,6 @@
+data/
+models/mediapipe/
+__pycache__/
+.venv/
+*.pyc
+.pytest_cache/
