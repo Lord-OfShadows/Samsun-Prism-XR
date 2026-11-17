@@ -32,7 +32,7 @@ next to each one. The README's Results section is regenerated from the same file
 | `predict()` | Returned valid JSON for all 258 test clips, offline, 0 errors (`outputs/predictions.jsonl`). |
 | Results table | `scripts/make_results.py` wrote `outputs/results.csv`; the accuracy row is filled, the latency, size and robustness rows say "not measured" until their runs finish. |
 | Benchmark, robustness scripts | Each run end to end on a trial model with a few clips, outputs sent to a temp folder. Full runs in progress. |
-| Live demo loop | `python demo/live.py --source <clip> --no-window` processes a clip and prints captions. Not yet seen by a human at a webcam. |
+| Live demo loop | `python demo/live.py --source <clip> --no-window` processed clips and printed captions, using a trial model. It was not rerun with the trained model (that would have disturbed the latency benchmark), and nobody has yet tried it at a webcam. |
 | Tests | `python -m pytest -q`: 30 passed on the last full run. After the final small refactors the 24 non-INT8 tests were rerun and passed; the 6 INT8 tests should be rerun once the machine is idle. |
 
 ## Measured numbers
