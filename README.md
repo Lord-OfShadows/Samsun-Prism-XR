@@ -177,8 +177,8 @@ Defaults: threshold 0.6, hold 1.5 s, in [`src/config.py`](src/config.py).
 | Metric | Target | Measured | Pass |
 |---|---|---|---|
 | `top1_accuracy` | >= 70 % | 82.56 % | PASS |
-| `latency_p95` | <= 50 ms | not measured | not measured |
-| `model_size` | <= 25 MB | not measured | not measured |
+| `latency_p95` | <= 50 ms | 3407.89 ms | FAIL |
+| `model_size` | <= 25 MB | 15.42 MB | PASS |
 | `accuracy_drop_robustness` | <= 5 points | not measured | not measured |
 | `avg_power` | <= 500 mW | not measured | not measured |
 | `thermal_drift_10min` | <= 20 % | not measured | not measured |
@@ -186,8 +186,8 @@ Defaults: threshold 0.6, hold 1.5 s, in [`src/config.py`](src/config.py).
 Notes per row:
 
 - `top1_accuracy`: INT8 model via predict() on all 258 clips of the WLASL100 test split; top-5 = 93.41 %
-- `latency_p95`: run python -m src.benchmark
-- `model_size`: run python -m src.benchmark
+- `latency_p95`: value = whole clip incl. landmarks (config.LATENCY_METRIC_FOR_RESULTS). All p95 over 200 runs: classifier call 2.38 ms; landmarks per frame 66.61 ms; whole clip 3407.89 ms (55 frames). Device: 12th Gen Intel(R) Core(TM) i7-12650H, LiteRT (ai-edge-litert 2.3.0), CPU, XNNPACK delegate
+- `model_size`: sum of every model file loaded (classifier_int8 1.82; mediapipe_hand_landmarker 7.82; mediapipe_pose_landmarker_lite 5.78); pass is judged against our stricter 20 MB design budget
 - `accuracy_drop_robustness`: run python -m src.robustness (needs the dataset)
 - `avg_power`: needs an on-phone run (Android stretch goal not built); not estimated
 - `thermal_drift_10min`: needs an on-phone run (Android stretch goal not built); not estimated
@@ -207,9 +207,32 @@ Measured on cached landmarks of the official WLASL100 splits. Every clip in the 
 - Representative set: 300 training clips
 - Training: 1441 clips, best validation epoch 190 of 250 run, 38 minutes on CPU
 
-### Latency and size
+### Latency (`outputs/benchmark.json`)
 
-Not measured yet: run `python -m src.benchmark`.
+Device: 12th Gen Intel(R) Core(TM) i7-12650H, Windows-10-10.0.26300-SP0. Runtime: LiteRT (ai-edge-litert 2.3.0), CPU, XNNPACK delegate, 1 thread for the classifier. 200 timed runs after 10 warm-up runs, over 20 test clips (median 55 frames per clip).
+
+| Measurement | p50 (ms) | p95 (ms) | max (ms) |
+|---|---|---|---|
+| One classifier call (isolated) | 2.36 | 2.38 | 2.40 |
+| Stage: decode video | 21.04 | 36.82 | 63.66 |
+| Stage: landmarks, whole clip | 2846.03 | 3378.49 | 3893.59 |
+| Stage: normalise | 0.88 | 1.46 | 1.75 |
+| Stage: classifier | 4.29 | 6.07 | 7.08 |
+| Landmarks per frame | 52.89 | 66.61 | 80.59 |
+| **End to end, one clip** | 2869.72 | 3407.89 | 3920.76 |
+
+The brief does not say whether its 50 ms ceiling means one classifier call, one frame, or a whole clip, so all three are reported. This is a laptop CPU, not a phone.
+
+### Model size
+
+| File | Size (MB) |
+|---|---|
+| classifier_int8 | 1.82 |
+| mediapipe_hand_landmarker | 7.82 |
+| mediapipe_pose_landmarker_lite | 5.78 |
+| **Total** | **15.42** |
+
+Budget 20 MB: within budget. MB = 1,000,000 bytes.
 
 ### Robustness
 

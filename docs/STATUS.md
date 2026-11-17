@@ -1,6 +1,6 @@
 # Status: Core tier build
 
-Written 17 Nov 2026, about 13:10 IST, when the build session was paused. Every number
+Written 17 Nov 2026, about 13:20 IST, when the build session was paused. Every number
 here was printed by a script run in that session; the script and output file are named
 next to each one. The README's Results section is regenerated from the same files by
 `python scripts/update_readme.py`.
@@ -16,8 +16,10 @@ next to each one. The README's Results section is regenerated from the same file
 - The same test clips through `predict()` on the video files: **top-1 82.56 %, top-5
   93.41 %**, 258 of 258 clips answered, 0 errors. Source: `scripts/make_predictions.py` ->
   `outputs/predictions.jsonl`, scored by `scripts/make_results.py`.
-- **Still running unattended when this was written:** the latency benchmark and the
-  robustness evaluation, after which `results.csv` is rewritten. See "What is left".
+- Latency, p95 over 200 runs on a laptop CPU: classifier call 2.38 ms, landmarks per
+  frame 66.61 ms, whole clip 3407.89 ms. Total size of all models: 15.42 MB.
+- **Still running unattended when this was written:** the robustness evaluation, after
+  which `results.csv` and the README are rewritten. See "What is left".
 
 ## What works (run and verified)
 
@@ -31,7 +33,8 @@ next to each one. The README's Results section is regenerated from the same file
 | INT8 conversion | `python -m src.convert`: attention layers converted cleanly; no fallback architecture needed, no quantization-aware training needed (drop under 2 points). |
 | `predict()` | Returned valid JSON for all 258 test clips, offline, 0 errors (`outputs/predictions.jsonl`). |
 | Results table | `scripts/make_results.py` wrote `outputs/results.csv`; the accuracy row is filled, the latency, size and robustness rows say "not measured" until their runs finish. |
-| Benchmark, robustness scripts | Each run end to end on a trial model with a few clips, outputs sent to a temp folder. Full runs in progress. |
+| Benchmark | `python -m src.benchmark`: 200 timed runs completed, `outputs/benchmark.json`. |
+| Robustness script | Run end to end on a trial model with two clips. The full run was in progress. |
 | Live demo loop | `python demo/live.py --source <clip> --no-window` processed clips and printed captions, using a trial model. It was not rerun with the trained model (that would have disturbed the latency benchmark), and nobody has yet tried it at a webcam. |
 | Tests | `python -m pytest -q`: 30 passed on the last full run. After the final small refactors the 24 non-INT8 tests were rerun and passed; the 6 INT8 tests should be rerun once the machine is idle. |
 
@@ -74,11 +77,31 @@ tuned to the test set, but its run-to-run spread is unknown.
 | Sum | 15,419,755 | 15.42 |
 
 Under the 20 MB budget with the pose model included, so the hands-only fallback is not
-needed. `src/benchmark.py` computes this sum itself and writes it to `outputs/benchmark.json`.
+needed. Source: `src/benchmark.py` -> `outputs/benchmark.json`.
 
-### Latency, robustness
+### Latency (`outputs/benchmark.json`)
 
-**Not available when this was written**: the runs were in progress. See below.
+200 timed runs after 10 warm-up runs, over 20 test clips (median 55 frames per clip).
+Device: 12th Gen Intel(R) Core(TM) i7-12650H laptop CPU, LiteRT (ai-edge-litert 2.3.0), CPU, XNNPACK delegate, 1 thread for the classifier.
+
+| Measurement | p50 (ms) | p95 (ms) | max (ms) |
+|---|---|---|---|
+| One classifier call (isolated) | 2.36 | 2.38 | 2.40 |
+| Stage: decode video | 21.04 | 36.82 | 63.66 |
+| Stage: landmarks, whole clip | 2846.03 | 3378.49 | 3893.59 |
+| Stage: normalise | 0.88 | 1.46 | 1.75 |
+| Stage: classifier | 4.29 | 6.07 | 7.08 |
+| Landmarks per frame | 52.89 | 66.61 | 80.59 |
+| End to end, one clip | 2869.72 | 3407.89 | 3920.76 |
+
+Against the 50 ms ceiling: the classifier call passes with a wide margin; one frame of
+landmark extraction does not on this laptop; a whole clip is seconds, not milliseconds.
+MediaPipe is almost all of the time. `results.csv` carries the whole-clip figure in its
+single latency row, so that row reads FAIL (see `docs/ASSUMPTIONS.md` #20).
+
+### Robustness
+
+**Not available when this was written**: the run was in progress. See below.
 
 ### Not measured, and will not be in Core
 
@@ -89,31 +112,30 @@ They are written as "not measured" in `results.csv`.
 
 ### 1. Collect the unattended run (first thing to do)
 
-A pipeline was left running. Predictions are finished and committed; still to come are
-benchmark -> robustness -> results -> readme.
+A pipeline was left running. Predictions and the benchmark are finished and committed;
+still to come are robustness -> results -> readme.
 Its log is `logs/pipeline.log`. When it has finished (the last line says `readme done`):
 
 ```
 git add outputs README.md
-git commit -m "Add benchmark, robustness and final results"
+git commit -m "Add robustness results"
 git push origin core-mvp
 ```
 
 If it stopped part-way, the log's last line names the failed step; resume with
 `python scripts/run_all.py --from <step>`.
 
-Then update this file's "Latency, robustness" section from the README Results block.
+Then update this file's "Robustness" section from the README Results block.
 
-### 2. Expect the latency numbers from this laptop to look bad
+### 2. Treat the latency numbers as laptop numbers
 
-The laptop throttles hard under sustained load. In this session MediaPipe measured about
-50 ms per frame when cool and 170 to 230 ms per frame once throttled, about 15 seconds
-into a run. The 200-run benchmark will mostly sit in the throttled state. Rerun
+The laptop throttles under sustained load. Earlier in the session MediaPipe measured
+about 50 ms per frame when cool and 170 to 230 ms per frame once throttled. The benchmark
+above happened to run mostly in the faster state, but a rerun can differ a lot. Rerun
 `python -m src.benchmark` on a cool, idle machine before quoting latency anywhere
-(`docs/BLOCKED.md` #4). Whatever the machine, a whole clip is 64 frames of two MediaPipe
-models and will not be under 50 ms; only the classifier call (single-digit milliseconds
-in trial runs) is. Which of these the brief's 50 ms means is an open question to the
-organisers.
+(`docs/BLOCKED.md` #4). Whatever the machine, a whole clip is up to 64 frames of two
+MediaPipe models and will not be under 50 ms; only the classifier call is. Which of these
+the brief's 50 ms means is an open question to the organisers.
 
 ### 3. Human checks
 
@@ -136,9 +158,9 @@ organisers.
 | `predict()` returns valid JSON for any clip in the test manifest, with no network access | **Done.** All 258 test clips answered, 0 errors, models loaded from local files only. |
 | INT8 `.tflite` model and `convert.py` in the repo | **Done.** |
 | `make_predictions.py` writes `predictions.jsonl` with every clip ID present | **Done.** 258 lines for 258 clips. A clip that failed would still get a line. |
-| `make_results.py` writes `results.csv` and computes the pass column | **Done for accuracy.** The latency, size and robustness rows are filled when the unattended run ends. |
+| `make_results.py` writes `results.csv` and computes the pass column | **Done** for accuracy, latency and size. The robustness row is filled when the unattended run ends. |
 | Measured top-1 and top-5 on the WLASL100 test split | **Done:** INT8 82.56 % / 93.41 %, both on cached landmarks and through `predict()`. |
-| Measured p95 latency, split into landmark extraction and classification | **Script done and trial-run**; 200-run measurement in progress. Rerun on a cool machine. |
+| Measured p95 latency, split into landmark extraction and classification | **Done** (table above). Worth rerunning on a cool, idle machine. |
 | Webcam demo with caption overlay, and the recorded demo video | **Code done**, tested headless on video files. A human still has to try the webcam. The recorded video is out of scope for this build. |
 | README with setup, commands and the stated vocabulary assumption | **Done**, with diagrams and an AI-assistance line. |
 | PPT on the organisers' template | Out of scope for this build. |
