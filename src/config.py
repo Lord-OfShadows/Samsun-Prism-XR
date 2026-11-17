@@ -13,6 +13,9 @@ HAND_MODEL = MP_MODELS_DIR / "hand_landmarker.task"
 # fastest of the three pose variants, which matters for both the size and latency budgets.
 POSE_MODEL = MP_MODELS_DIR / "pose_landmarker_lite.task"
 
+WLASL_DIR = ROOT / "data" / "wlasl"           # scripts/get_wlasl100.py downloads into here
+WLASL_JSON = WLASL_DIR / "WLASL_v0.3.json"
+VIDEO_DIR = WLASL_DIR / "videos"              # <video_id>.mp4
 LANDMARK_DIR = ROOT / "data" / "landmarks"   # one .npz per clip
 MANIFEST_PATH = ROOT / "data" / "manifest.csv"
 ROBUSTNESS_DIR = ROOT / "data" / "robustness"  # cached landmarks of perturbed test clips

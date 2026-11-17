@@ -106,8 +106,10 @@ def check_against_nslt(jobs, wlasl_json, n):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--wlasl-json", required=True)
-    ap.add_argument("--videos", required=True, help="folder with <video_id>.mp4")
+    ap.add_argument("--wlasl-json", default=str(config.WLASL_JSON),
+                    help="default: data/wlasl/WLASL_v0.3.json (where scripts/get_wlasl100.py puts it)")
+    ap.add_argument("--videos", default=str(config.VIDEO_DIR),
+                    help="folder with <video_id>.mp4; default: data/wlasl/videos")
     ap.add_argument("--write-vocab", type=int, metavar="N",
                     help="write the first N glosses of the json to configs/vocab.txt and exit. "
                          "WLASL orders glosses so the first 100 ARE the WLASL100 subset.")

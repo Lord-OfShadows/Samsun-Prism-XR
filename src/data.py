@@ -4,6 +4,8 @@ The manifest (data/manifest.csv, written by scripts/extract_all.py) has one row 
 video_id, gloss, label, split, status, path. video_id must stay a STRING: WLASL ids have
 leading zeros ("00618") that pandas would otherwise strip.
 """
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -15,7 +17,20 @@ def load_manifest(path=None):
     p = path or config.MANIFEST_PATH
     if not p.exists():
         raise FileNotFoundError(f"{p} missing; run scripts/extract_all.py first (see README)")
-    return pd.read_csv(p, dtype={"video_id": str})
+    df = pd.read_csv(p, dtype={"video_id": str})
+    df["path"] = [str(_find_video(v, raw)) for v, raw in zip(df.video_id, df.path)]
+    return df
+
+
+def _find_video(video_id, recorded):
+    """Where is this clip's video on THIS machine? The manifest may have been made on a
+    teammate's computer (other drive, other slashes), so try the recorded path, then the
+    same path under this repo, then the standard folder data/wlasl/videos/."""
+    rel = Path(str(recorded).replace("\\", "/"))
+    for cand in (rel, config.ROOT / rel, config.VIDEO_DIR / f"{video_id}.mp4"):
+        if cand.exists():
+            return cand
+    return config.VIDEO_DIR / f"{video_id}.mp4"
 
 
 def load_raw(video_id, landmark_dir=None):

@@ -1,39 +1,203 @@
 # EchoGesture
 
-On-device isolated sign recognition: one short video clip of one sign in, one English word
-out. Entry for Track 2 of the Samsung PRISM XR Hackathon 2026.
+**On-device isolated sign recognition: one short clip of one sign in, one English word out.**
+Entry for Track 2 of the Samsung PRISM XR Hackathon 2026.
 
+A hearing person who does not sign cannot follow a Deaf signer without an interpreter.
+EchoGesture is the recognition building block for a wearable or phone that shows captions
+to the wearer: it watches a sign and names the word, entirely on the device.
+
+- **Private:** the video is reduced to keypoints on the device; no image is stored or sent.
+- **Small:** one INT8 classifier plus two MediaPipe models, measured against a 20 MB budget.
+- **Honest:** every number here is written by a script in this repo. Anything we could not measure says "not measured".
+
+**What it is not:** it does not translate continuous, conversational signing, and it only
+knows the 100 ASL words in [`configs/vocab.txt`](configs/vocab.txt).
+
+## Contents
+
+- [How it works](#how-it-works)
+- [Results](#results)
+- [Setup](#setup)
+- [Recognise a clip](#recognise-a-clip)
+- [Live webcam demo](#live-webcam-demo)
+- [For teammates: get the data and train](#for-teammates-get-the-data-and-train)
+- [Reproduce every number](#reproduce-every-number)
+- [Design choices](#design-choices)
+- [Repository layout](#repository-layout)
+- [Vocabulary assumption](#vocabulary-assumption)
+- [AI assistance](#ai-assistance)
+
+## How it works
+
+### The pipeline
+
+The video is turned into keypoints first, and only the keypoints are classified.
+
+```mermaid
+flowchart LR
+    V["Video clip<br/>one sign"] --> D["OpenCV decode<br/>keep at most 64 frames"]
+    D --> H["MediaPipe hand landmarker<br/>21 3D points per hand"]
+    D --> P["MediaPipe pose landmarker<br/>shoulders, elbows, wrists, nose"]
+    H --> N["Normalise<br/>64 frames x 227 numbers"]
+    P --> N
+    N --> C["INT8 classifier<br/>LiteRT interpreter"]
+    C --> J["JSON<br/>word, top 5, confidence, latency"]
+
+    subgraph device ["Everything runs on the device, offline"]
+        D
+        H
+        P
+        N
+        C
+    end
 ```
-video -> MediaPipe hand + pose landmarks -> normalise -> INT8 classifier -> JSON
+
+| Stage | Module | What comes out |
+|---|---|---|
+| Decode | [`src/landmarks.py`](src/landmarks.py) | Up to 64 evenly spaced frames |
+| Landmarks | [`src/landmarks.py`](src/landmarks.py) | Raw hand and body points in pixels; "not found" is recorded, not guessed |
+| Normalise | [`src/normalize.py`](src/normalize.py) | A fixed 64 x 227 table, every value in [-3, 3] |
+| Classify | [`src/classifier.py`](src/classifier.py) | A probability for each of the 100 words |
+| Report | [`predict.py`](predict.py) | The JSON the evaluator reads |
+
+### What the model actually sees
+
+Each of the 64 frames becomes 227 numbers. The hands appear twice, in two different
+coordinate frames, because a sign is defined both by **where** the hand is and by **what
+shape** it makes.
+
+```mermaid
+flowchart TB
+    RAW["Raw landmarks for one frame<br/>pixels, some hands missing"]
+
+    RAW --> BF
+    RAW --> HF
+    RAW --> MK
+
+    subgraph BF ["BODY frame: origin at shoulder midpoint, unit = shoulder width"]
+        B1["7 body points, x y<br/>14 numbers"]
+        B2["Left and right hand, 21 points each, x y<br/>84 numbers<br/>WHERE the hands are"]
+    end
+
+    subgraph HF ["HAND frame: origin at that hand's wrist, unit = palm length"]
+        H1["Left and right hand, 21 points each, x y z<br/>126 numbers<br/>WHAT SHAPE the hands make"]
+    end
+
+    subgraph MK ["Mask flags"]
+        M1["left hand found, right hand found, body found<br/>3 numbers"]
+    end
+
+    BF --> OUT["227 numbers per frame<br/>missing hand = zeros + flag 0"]
+    HF --> OUT
+    MK --> OUT
 ```
 
-The video is reduced to keypoints first and only the keypoints are classified. No image
-is stored and nothing leaves the device.
+- **Body frame** removes where the signer stands and how far they are from the camera.
+- **Hand frame** removes the hand's position and size, leaving handshape and orientation. This is the pose-invariant 3D hand feature the brief asks for.
+- **Mask flags** make "hand not visible" a state the model has been trained on, instead of garbage coordinates.
 
-**What this is not:** it does not translate continuous signing, and it only knows the 100
-words in `configs/vocab.txt`.
+### The classifier
 
-## Vocabulary assumption
+About 1.59 million parameters (1,586,596). Convolutions read local motion over a few
+frames; attention relates distant moments of the sign to each other.
 
-The organisers have not supplied a word list, so we assume **WLASL100**: the first 100
-glosses of `WLASL_v0.3.json`, with the **official train / val / test split** stored in
-that file (1,442 / 338 / 258 clips). The model is trained on train, selected on val and
-reported on test. The word list lives in one file, `configs/vocab.txt`; retraining on a
-different list is one command (see "Retrain on another word list").
+```mermaid
+flowchart TB
+    IN["Input<br/>64 frames x 227 features"] --> STEM["Dense 192 + BatchNorm<br/>lift each frame to 192 channels"]
+    STEM --> C1["3 x separable conv block"]
+    C1 --> A1["Self-attention block<br/>4 heads"]
+    A1 --> C2["3 x separable conv block"]
+    C2 --> A2["Self-attention block<br/>4 heads"]
+    A2 --> POOL["Average over the 64 frames"]
+    POOL --> DROP["Dropout 0.4"]
+    DROP --> OUT["Dense 100 + softmax<br/>one probability per word"]
+
+    subgraph CB ["Inside one separable conv block"]
+        direction LR
+        X1["Dense 384<br/>widen"] --> X2["Depthwise conv, kernel 9<br/>filter each channel along time"] --> X3["Dense 192<br/>narrow"] --> X4["Add the block's input<br/>residual"]
+    end
+    C1 -.-> CB
+```
+
+Defined in [`src/model.py`](src/model.py). `python -m src.train --arch conv` trains the
+same network without the attention blocks, which is the fallback if attention had failed
+to convert to INT8. It converted cleanly, so the fallback is not used.
+
+### From dataset to shipped model
+
+```mermaid
+flowchart TB
+    W["WLASL100 videos<br/>2,038 clips"] -->|"scripts/extract_all.py<br/>slow, run once"| L["Cached landmarks<br/>one small file per clip"]
+    L --> TR["Train split<br/>1,442 clips"]
+    L --> VA["Validation split<br/>338 clips"]
+    L --> TE["Test split<br/>258 clips"]
+
+    TR -->|"new augmentation every epoch"| T["src/train.py"]
+    VA -->|"pick the best epoch"| T
+    T --> F["Float Keras model"]
+    TR -->|"300 real clips<br/>as representative set"| Q["src/convert.py<br/>full-integer quantisation"]
+    F --> Q
+    Q --> I["echogesture_int8.tflite"]
+
+    I --> PR["scripts/make_predictions.py<br/>predict on every test clip"]
+    TE --> PR
+    I --> BE["src/benchmark.py<br/>latency and size"]
+    I --> RO["src/robustness.py<br/>dark, rotated, occluded, mirrored"]
+    PR --> R["scripts/make_results.py"]
+    BE --> R
+    RO --> R
+    R --> CSV["outputs/results.csv"]
+```
+
+The test split is used only to report the final number. It never influences training or
+the choice of model.
+
+### Live captions
+
+In the webcam demo a word is shown only when the model is confident, and then held, so
+the caption does not flicker between guesses.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Blank
+    Blank --> Showing: confidence at or above threshold
+    Showing --> Showing: same word again, or a different word before the hold time is up
+    Showing --> Showing: different confident word after the hold time, caption switches
+    Showing --> Blank: nothing confident for the hold time
+```
+
+Defaults: threshold 0.6, hold 1.5 s, in [`src/config.py`](src/config.py).
 
 ## Results
 
-Every number below is produced by a script in this repo. Nothing is typed by hand, and
-anything we could not measure says so.
-
 <!-- RESULTS:START -->
-Results have not been generated yet. See `docs/STATUS.md`.
+Not generated yet: run `python scripts/make_results.py`.
+
+### Accuracy
+
+Not generated yet: run `python -m src.train` then `python -m src.convert`.
+
+### Latency and size
+
+Not measured yet: run `python -m src.benchmark`.
+
+### Robustness
+
+Not measured yet: run `python -m src.robustness`.
+
+### Not measured
+
+`avg_power` and `thermal_drift_10min` need a run on a phone. There is no Android build (it is a stretch goal), so they are reported as not measured, never estimated.
 <!-- RESULTS:END -->
+
+The block above is written by [`scripts/update_readme.py`](scripts/update_readme.py) from
+the files in [`outputs/`](outputs/). It is never edited by hand.
 
 ## Setup
 
-Python **3.11** is required (Keras 3.15 does not support 3.10). Tested on Windows 11; CPU
-only, no GPU needed.
+Python **3.11** is required (Keras 3.15 does not support 3.10). Tested on Windows 11. CPU
+only; no GPU is needed.
 
 ```
 python -m venv .venv
@@ -42,8 +206,15 @@ pip install -r requirements.txt
 python scripts/get_mediapipe_models.py
 ```
 
-The last line downloads the two MediaPipe model files (13.6 MB) into `models/mediapipe/`.
-It is the only step that needs the network; everything after it runs offline.
+The last line downloads the two MediaPipe model files (7.82 MB and 5.78 MB) into
+`models/mediapipe/`. Together with the dataset download, it is the only step that needs
+the network; recognition itself runs offline.
+
+Check the install:
+
+```
+python -m pytest -q
+```
 
 ## Recognise a clip
 
@@ -58,7 +229,7 @@ from predict import predict
 result = predict("path/to/clip.mp4")
 ```
 
-Output (the schema is defined in one function, `format_output()` in `predict.py`):
+Output format (defined in one function, `format_output()` in [`predict.py`](predict.py)):
 
 ```json
 {
@@ -71,63 +242,113 @@ Output (the schema is defined in one function, `format_output()` in `predict.py`
 }
 ```
 
-The values above only illustrate the format.
+The values above only illustrate the format; they are not measurements.
 
 ## Live webcam demo
 
 ```
 python demo/live.py                    # press q to quit
+python demo/live.py --mirror           # show the picture mirrored, like a selfie camera
 python demo/live.py --source clip.mp4  # run a video file through the same loop
+python demo/live.py --source clip.mp4 --no-window   # no display, prints caption changes
 ```
 
-A word appears only when the model's confidence is above a threshold (default 0.6) and
-then stays on screen for at least 1.5 seconds, so the caption does not flicker. Both
-values are in `src/config.py`.
+## For teammates: get the data and train
+
+There are two kinds of data, and you can get either without the other.
+
+| You want to | You need | How to get it |
+|---|---|---|
+| Train or convert the model | Cached landmarks (80.7 MB zip) | Ask the teammate who ran extraction for `echogesture_wlasl100_landmarks.zip`, then unpack it (below). Or build it yourself from the videos. |
+| Run predictions, benchmark, robustness, or re-extract landmarks | The WLASL100 videos (about 212 MB) | `python scripts/get_wlasl100.py` |
+
+**Fastest route to training (no videos, no hour of extraction):**
+
+```
+python scripts/pack_landmarks.py --unpack path\to\echogesture_wlasl100_landmarks.zip
+python -m src.train
+python -m src.convert
+```
+
+**Building the landmarks yourself from the public videos:**
+
+```
+python scripts/get_wlasl100.py     # downloads the json and 2,038 clips into data/wlasl/
+python scripts/extract_all.py      # about an hour on a laptop; resumable
+python scripts/pack_landmarks.py   # optional: make the zip to pass on
+```
+
+The zip is not in this repository: it is too large for git, and the dataset licence
+(WLASL, C-UDA: computational use only) means it should be shared inside the team, not
+posted publicly. Whoever has it can send it over Drive or a USB stick; it lives at
+`data/share/echogesture_wlasl100_landmarks.zip` on the machine that built it.
+
+Watch a long run from another terminal (PowerShell):
+
+```
+Get-Content logs\train.log -Wait -Tail 5
+```
+
+if you started it with `python -m src.train *> logs\train.log`.
 
 ## Reproduce every number
 
-### 1. Get the data
-
-You need `WLASL_v0.3.json` and a folder of `<video_id>.mp4` files for the 100 words.
-
-- Metadata: `https://raw.githubusercontent.com/dxli94/WLASL/master/start_kit/WLASL_v0.3.json`
-- Videos: we used the public Hugging Face mirror `aipieces/WLASL100` (five zip files under
-  `WLASL100/`, about 212 MB, 2,038 clips already trimmed to 256x256). Unzip them and put
-  all the `.mp4` files in one flat folder. Check the dataset's licence before
-  redistributing anything.
-
-Place them at `data/wlasl/WLASL_v0.3.json` and `data/wlasl/videos/`. `data/` is not
-committed.
-
-### 2. Run the pipeline
-
-Everything, in one command:
+Everything, in one command (downloads the data, extracts, trains, converts, measures):
 
 ```
-python scripts/run_all.py --wlasl-json data/wlasl/WLASL_v0.3.json --videos data/wlasl/videos
+python scripts/run_all.py
 ```
 
 Or step by step:
 
 | Step | Command | Writes |
 |---|---|---|
-| Cache landmarks | `python scripts/extract_all.py --wlasl-json data/wlasl/WLASL_v0.3.json --videos data/wlasl/videos` | `data/landmarks/`, `data/manifest.csv`, `outputs/extraction_report.md`, `outputs/clip_counts.csv` |
+| MediaPipe models | `python scripts/get_mediapipe_models.py` | `models/mediapipe/` |
+| Dataset | `python scripts/get_wlasl100.py` | `data/wlasl/` |
+| Cache landmarks | `python scripts/extract_all.py` | `data/landmarks/`, `data/manifest.csv`, `outputs/extraction_report.md`, `outputs/clip_counts.csv` |
 | Train | `python -m src.train` | `models/echogesture_float.keras`, `outputs/train_log.json` |
 | Convert to INT8 | `python -m src.convert` | `models/echogesture_int8.tflite`, `outputs/quantization.json` |
-| Predictions | `python scripts/make_predictions.py` | `outputs/predictions.jsonl` |
+| Predictions | `python scripts/make_predictions.py --workers 3` | `outputs/predictions.jsonl` |
 | Latency and size | `python -m src.benchmark` | `outputs/benchmark.json` |
 | Robustness | `python -m src.robustness` | `outputs/robustness.json` |
 | Results table | `python scripts/make_results.py` | `outputs/results.csv` |
+| README results block | `python scripts/update_readme.py` | the Results section above |
 | Tests | `python -m pytest -q` | |
 
-Landmark extraction is the slow step (about an hour for the 2,038 clips on our laptop);
-it is resumable. To write a fresh `configs/vocab.txt` from the first N glosses of the
-json: `python scripts/extract_all.py --wlasl-json ... --videos ... --write-vocab 100`.
+Useful options:
+
+- `python scripts/run_all.py --from train` starts at a later step; `--only benchmark` runs one step.
+- `python -m src.benchmark --runs 20` and `python -m src.robustness --limit 20` are quick checks.
+- Run the benchmark with nothing else running, or the latency will be inflated.
 
 ### Retrain on another word list
 
-Edit `configs/vocab.txt` (one word per line; each must be a gloss in the WLASL json), then
-run the `run_all.py` command above. The number of classes is read from that file.
+Edit [`configs/vocab.txt`](configs/vocab.txt) (one word per line; each must be a gloss in
+the WLASL json), then run `python scripts/run_all.py --from extract`. The number of
+classes is read from that file; nothing else names the vocabulary. To regenerate the file
+from the first N glosses of the json: `python scripts/extract_all.py --write-vocab 100`.
+
+## Design choices
+
+| Choice | Instead of | Why |
+|---|---|---|
+| Classify keypoints | A video model on pixels | A keypoint classifier is a couple of megabytes and never stores an image. A video model has a higher accuracy ceiling but would not fit the size and latency budgets comfortably. |
+| MediaPipe as shipped | Training our own detector | It runs on-device, gives 3D hand points, and five days is not enough to train a detector. |
+| At most 64 frames reach MediaPipe | Every frame | The classifier reads exactly 64 frames, so landmarking more is latency with no benefit. |
+| Hands matched to the pose skeleton's wrists | Trusting MediaPipe's left/right label | The label is guessed from the hand crop and flips when hands cross; the skeleton sees the whole arm. |
+| Hands in two frames (body and hand) | One set of coordinates | Location and handshape are separate cues, and each needs its own normalisation. |
+| Zeros plus a mask flag for a missing hand | Interpolating or leaving noise | Occlusion becomes something the model has seen in training. |
+| One body centre and scale per clip | Per-frame | A signer does not move within a two-second sign; per-frame values would add shoulder jitter to every hand coordinate. |
+| Separable convolutions plus two attention blocks | A plain transformer or LSTM | Small, fast, and all of it converts to integer operations. |
+| BatchNorm and ReLU | LayerNorm and GELU | These fold into neighbouring layers and quantise cleanly to INT8. |
+| Augment the keypoints, fresh every epoch | Augmenting video | Thousands of times cheaper, which matters with about 14 training clips per word. |
+| Full-integer INT8, post-training | Float16 or dynamic-range | It is what integer-only edge accelerators run, and what the brief scores. |
+| Robustness tested on damaged pixels | Damaged keypoints | The test then includes MediaPipe itself failing, which is what happens in bad light. |
+| Threshold plus hold time for captions | Showing every prediction | A caption that flickers is unreadable. |
+
+Each module's reasoning is written out in plain language in
+[`docs/MODULES.md`](docs/MODULES.md). Decisions taken where the brief was unclear are
+logged in [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md).
 
 ## Repository layout
 
@@ -147,17 +368,28 @@ src/
   robustness.py         perturbed test set and accuracy drop
   data.py               manifest and cache readers
 scripts/
-  get_mediapipe_models.py, extract_all.py, make_predictions.py, make_results.py, run_all.py
+  get_mediapipe_models.py   download the two MediaPipe models
+  get_wlasl100.py           download the dataset
+  extract_all.py            cache landmarks for the dataset
+  pack_landmarks.py         zip / unzip the cached landmarks for teammates
+  make_predictions.py       writes predictions.jsonl
+  make_results.py           writes results.csv
+  update_readme.py          writes the Results block of this file
+  run_all.py                all of the above in order
 demo/live.py            webcam captions
-models/                 echogesture_int8.tflite (+ the float model it was converted from)
+models/                 echogesture_int8.tflite and the float model it was converted from
 outputs/                predictions.jsonl, results.csv and the json files behind them
 docs/                   STATUS.md, MODULES.md, ASSUMPTIONS.md
 tests/
 ```
 
-Plain-language notes on every module are in `docs/MODULES.md`. Decisions made where the
-brief was unclear are in `docs/ASSUMPTIONS.md`. Current state and open items are in
-`docs/STATUS.md`.
+## Vocabulary assumption
+
+The organisers have not supplied a word list, so we assume **WLASL100**: the first 100
+glosses of `WLASL_v0.3.json`, with the **official train / val / test split** stored in
+that file (1,442 / 338 / 258 clips). The model is trained on train, selected on val and
+reported on test. Of the 2,038 clips, 2,036 were usable (a hand was found in at least one
+frame); see [`outputs/extraction_report.md`](outputs/extraction_report.md).
 
 ## AI assistance
 
