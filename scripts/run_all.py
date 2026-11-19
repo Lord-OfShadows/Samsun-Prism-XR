@@ -10,7 +10,7 @@ names the vocabulary; the number of classes is read from that file.
   --only benchmark    run a single step
 
 Steps, in order:
-  models data extract train convert predictions benchmark robustness results readme
+  models data extract train convert predictions confusion benchmark robustness results readme
 """
 import argparse
 import subprocess
@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STEPS = ["models", "data", "extract", "train", "convert", "predictions", "benchmark", "robustness", "results", "readme"]
+STEPS = ["models", "data", "extract", "train", "convert", "predictions", "confusion", "benchmark", "robustness", "results", "readme"]
 
 
 def commands(args):
@@ -31,6 +31,7 @@ def commands(args):
         "train": [py, "-m", "src.train", "--arch", args.arch],
         "convert": [py, "-m", "src.convert"],
         "predictions": [py, "scripts/make_predictions.py", "--workers", str(args.workers)],
+        "confusion": [py, "scripts/confusion.py"],
         "benchmark": [py, "-m", "src.benchmark"],
         "robustness": [py, "-m", "src.robustness", "--workers", str(args.workers)],
         "results": [py, "scripts/make_results.py"],

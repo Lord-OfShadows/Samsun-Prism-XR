@@ -1,0 +1,11 @@
+rank,word_a,word_b,a_read_as_b,b_read_as_a,total
+1,dog,later,1,1,2
+2,no,right,1,1,2
+3,accident,wrong,1,0,1
+4,africa,brown,1,0,1
+5,all,but,1,0,1
+6,before,cousin,1,0,1
+7,before,enjoy,1,0,1
+8,before,fish,1,0,1
+9,before,last,0,1,1
+10,book,school,0,1,1

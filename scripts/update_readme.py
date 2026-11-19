@@ -111,9 +111,35 @@ def robustness_section(r):
     return out
 
 
+def confusion_section(c):
+    if not c:
+        return ["### Confusion analysis", "", "Not generated yet: run `python scripts/confusion.py`."]
+    repeated = [p for p in c["pairs"] if p["total"] > 1]
+    out = ["### Confusion analysis (`outputs/confusion.csv`, `outputs/confusion.json`)", "",
+           f"{c['errors']} of {c['clips_scored']} test clips are wrong, spread over "
+           f"{c['distinct_error_pairs']} different word pairs. {c['words_never_wrong']} of the "
+           f"{c['words_scored']} words are never wrong.", "",
+           "Word pairs confused more than once (either direction):", ""]
+    if repeated:
+        out += ["| Pair | A read as B | B read as A | Total |", "|---|---|---|---|"]
+        out += [f"| {p['word_a']} / {p['word_b']} | {p['a_read_as_b']} | {p['b_read_as_a']} | {p['total']} |"
+                for p in repeated]
+    else:
+        out.append("None: every confused pair occurs once.")
+    out += ["", "Weakest words (correct / test clips): "
+            + "; ".join(f"{w['word']} {w['correct']}/{w['clips']}" for w in c["worst_words"][:6]) + ".", "",
+            "Most frequent wrong guesses: "
+            + "; ".join(f"{w['word']} ({w['times']})" for w in c["most_frequent_wrong_guesses"]) + ".", "",
+            "With 2 to 4 test clips per word, each pair rests on one or two clips. Pairs seen "
+            "only once are listed in `confusion.csv` in alphabetical order; their order there "
+            "is not a ranking."]
+    return out
+
+
 def main():
     blocks = [results_table(), accuracy_section(_json("quantization.json"), _json("train_log.json")),
               benchmark_section(_json("benchmark.json")), robustness_section(_json("robustness.json")),
+              confusion_section(_json("confusion.json")),
               ["### Not measured", "",
                "`avg_power` and `thermal_drift_10min` need a run on a phone. There is no Android "
                "build (it is a stretch goal), so they are reported as not measured, never estimated."]]
