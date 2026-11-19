@@ -97,6 +97,18 @@ only at the very end reports accuracy on the test split.
 - *Early stopping.* Training stops when validation accuracy has not improved for a while, and the best weights are restored.
 - *Every clip counts at test time.* A test clip where no hand was found still counts in the denominator.
 
+### `scripts/confusion.py` — which words get mixed up
+
+**What it does.** Compares each test clip's predicted word (`outputs/predictions.jsonl`)
+with its true word (`data/manifest.csv`) and writes the most confused word pairs to
+`outputs/confusion.csv`. Per-word accuracy and the words most often guessed wrongly go to
+`outputs/confusion.json`.
+
+**Why it is built this way.**
+- *Pairs are unordered.* "dog read as later" and "later read as dog" both count towards {dog, later}, because the jury question is which signs look alike to the model. Both directions are still reported.
+- *Read the counts, not only the order.* With 2 to 4 test clips per word, most pairs occur once. Ties are listed alphabetically so the file is the same on every run, but a pair with a count of 1 is not "worse" than the one after it.
+- *Wrong guesses are counted too.* One word that soaks up errors from many different signs means a "default" guess, which is a different problem from one look-alike pair.
+
 ### `src/data.py`
 
 Reads the manifest and the cached landmark files for the other modules. Keeps clip ids as
@@ -186,6 +198,17 @@ that window a few times per second, and draws the caption on the video.
 - *Minimum hold time.* Once shown, a word stays for at least 1.5 seconds, so the caption does not flicker between guesses.
 - *No hands, no guess.* If hands are barely visible in the window, the classifier is not run at all.
 
+### `demo/speech.py` — speak the caption
+
+**What it does.** Says each new caption aloud with the speech engine built into Windows
+(System.Speech). Nothing is installed and nothing goes over the network.
+
+**Why it is built this way.**
+- *The video must never wait for the voice.* The voice runs in a separate PowerShell process started once with the demo. Sending a caption is one line written to that process, which returns at once.
+- *The newest caption interrupts the old one.* If captions changed faster than words are spoken, a queue would make the voice fall further and further behind the screen.
+- *No new package.* A Python TTS package would add a dependency to install and pin. The Windows engine is already on every machine we demo on. Elsewhere the demo runs silently and says so.
+- *It fails soft.* If the engine cannot start or stops, the captions carry on without sound.
+
 ---
 
 ## Shared
@@ -200,4 +223,5 @@ defined; the model's output size is read from it.
 
 Small tests for the parts where a mistake would be silent: normalisation (does moving or
 resizing the signer leave the features unchanged?), the JSON format, the results scoring
-(do failed clips count as wrong?), the caption logic, and the INT8 input scaling.
+(do failed clips count as wrong?), the caption logic, the INT8 input scaling, the
+confusion-pair counting, and the caption speaker (with a stand-in process, so no audio).

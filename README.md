@@ -179,7 +179,7 @@ Defaults: threshold 0.6, hold 1.5 s, in [`src/config.py`](src/config.py).
 | `top1_accuracy` | >= 70 % | 82.56 % | PASS |
 | `latency_p95` | <= 50 ms | 3407.89 ms | FAIL |
 | `model_size` | <= 25 MB | 15.42 MB | PASS |
-| `accuracy_drop_robustness` | <= 5 points | not measured | not measured |
+| `accuracy_drop_robustness` | <= 5 points | 11.92 points | FAIL |
 | `avg_power` | <= 500 mW | not measured | not measured |
 | `thermal_drift_10min` | <= 20 % | not measured | not measured |
 
@@ -188,7 +188,7 @@ Notes per row:
 - `top1_accuracy`: INT8 model via predict() on all 258 clips of the WLASL100 test split; top-5 = 93.41 %
 - `latency_p95`: value = whole clip incl. landmarks (config.LATENCY_METRIC_FOR_RESULTS). All p95 over 200 runs: classifier call 2.38 ms; landmarks per frame 66.61 ms; whole clip 3407.89 ms (55 frames). Device: 12th Gen Intel(R) Core(TM) i7-12650H, LiteRT (ai-edge-litert 2.3.0), CPU, XNNPACK delegate
 - `model_size`: sum of every model file loaded (classifier_int8 1.82; mediapipe_hand_landmarker 7.82; mediapipe_pose_landmarker_lite 5.78); pass is judged against our stricter 20 MB design budget
-- `accuracy_drop_robustness`: run python -m src.robustness (needs the dataset)
+- `accuracy_drop_robustness`: clean 82.56 % minus mean of perturbed sets 70.64 % (dark 80.23 %; rotated 82.17 %; occluded 37.60 %; mirrored 82.56 %); 258 test clips each
 - `avg_power`: needs an on-phone run (Android stretch goal not built); not estimated
 - `thermal_drift_10min`: needs an on-phone run (Android stretch goal not built); not estimated
 
@@ -234,9 +234,35 @@ The brief does not say whether its 50 ms ceiling means one classifier call, one 
 
 Budget 20 MB: within budget. MB = 1,000,000 bytes.
 
-### Robustness
+### Robustness (`outputs/robustness.json`)
 
-Not measured yet: run `python -m src.robustness`.
+The pixels of all 258 test clips are damaged, MediaPipe is re-run, and the INT8 model classifies the result.
+
+| Test set | Top-1 | Top-5 | Drop in top-1 (points) |
+|---|---|---|---|
+| Clean | 82.56 % | 93.41 % | |
+| Dark (brightness x0.25) | 80.23 % | 89.92 % | 2.33 |
+| Rotated (15 degrees) | 82.17 % | 92.64 % | 0.39 |
+| Occluded (box over 35% x 35% of the frame) | 37.60 % | 53.10 % | 44.96 |
+| Mirrored (left-right flip) | 82.56 % | 94.19 % | 0.00 |
+| **Mean of the four** | **70.64 %** | | **11.92** |
+
+### Confusion analysis (`outputs/confusion.csv`, `outputs/confusion.json`)
+
+45 of 258 test clips are wrong, spread over 43 different word pairs. 65 of the 100 words are never wrong.
+
+Word pairs confused more than once (either direction):
+
+| Pair | A read as B | B read as A | Total |
+|---|---|---|---|
+| dog / later | 1 | 1 | 2 |
+| no / right | 1 | 1 | 2 |
+
+Weakest words (correct / test clips): right 0/2; school 0/2; before 1/4; fine 1/3; letter 1/3; pizza 1/3.
+
+Most frequent wrong guesses: fish (3); but (2); drink (2); last (2); letter (2).
+
+With 2 to 4 test clips per word, each pair rests on one or two clips. Pairs seen only once are listed in `confusion.csv` in alphabetical order; their order there is not a ranking.
 
 ### Not measured
 
@@ -303,7 +329,14 @@ python demo/live.py                    # press q to quit
 python demo/live.py --mirror           # show the picture mirrored, like a selfie camera
 python demo/live.py --source clip.mp4  # run a video file through the same loop
 python demo/live.py --source clip.mp4 --no-window   # no display, prints caption changes
+python demo/live.py --no-speak        # captions on screen only, no voice
 ```
+
+Each new caption is spoken aloud by Windows' built-in offline voice (System.Speech), through
+[`demo/speech.py`](demo/speech.py). It needs no extra package and no network. The voice runs in a
+separate process, so the video never waits for it, and a new caption interrupts the previous word
+instead of queueing behind it. On Linux and macOS the demo runs silently. `--no-window` runs never
+speak.
 
 ## For teammates: get the data and train
 
@@ -361,6 +394,7 @@ Or step by step:
 | Train | `python -m src.train` | `models/echogesture_float.keras`, `outputs/train_log.json` |
 | Convert to INT8 | `python -m src.convert` | `models/echogesture_int8.tflite`, `outputs/quantization.json` |
 | Predictions | `python scripts/make_predictions.py --workers 3` | `outputs/predictions.jsonl` |
+| Confusion pairs | `python scripts/confusion.py` | `outputs/confusion.csv`, `outputs/confusion.json` |
 | Latency and size | `python -m src.benchmark` | `outputs/benchmark.json` |
 | Robustness | `python -m src.robustness` | `outputs/robustness.json` |
 | Results table | `python scripts/make_results.py` | `outputs/results.csv` |
@@ -425,10 +459,12 @@ scripts/
   extract_all.py            cache landmarks for the dataset
   pack_landmarks.py         zip / unzip the cached landmarks for teammates
   make_predictions.py       writes predictions.jsonl
+  confusion.py              the word pairs the model mixes up
   make_results.py           writes results.csv
   update_readme.py          writes the Results block of this file
   run_all.py                all of the above in order
 demo/live.py            webcam captions
+demo/speech.py          speaks each caption, offline
 models/                 echogesture_int8.tflite and the float model it was converted from
 outputs/                predictions.jsonl, results.csv and the json files behind them
 docs/                   STATUS.md, MODULES.md, ASSUMPTIONS.md

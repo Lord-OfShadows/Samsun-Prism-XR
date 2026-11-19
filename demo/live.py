@@ -3,6 +3,7 @@
   python demo/live.py                       # default webcam, press q to quit
   python demo/live.py --source clip.mp4     # play a file through the same loop
   python demo/live.py --source clip.mp4 --no-window   # headless, prints captions (for testing)
+  python demo/live.py --no-speak            # captions on screen only, no voice
 
 How it works: the newest ~2.5 seconds of landmarks are kept in a sliding window. A few
 times per second the window is normalised exactly like a training clip and classified by
@@ -10,6 +11,10 @@ the INT8 model. CaptionStabilizer then decides what the viewer sees: a word appe
 when its confidence clears a threshold, and once shown it stays for a minimum time, so
 the caption does not flicker between guesses. If no hand has been visible in the window,
 nothing is classified at all.
+
+Each new caption is also spoken aloud, offline, by demo/speech.py (Windows' built-in voice,
+in a separate process so the video never waits for the audio). Speech is off with
+--no-speak, and in --no-window runs, which are for testing.
 """
 import argparse
 import sys
@@ -71,12 +76,14 @@ def main():
     ap.add_argument("--threshold", type=float, default=config.CAPTION_THRESHOLD)
     ap.add_argument("--hold", type=float, default=config.CAPTION_HOLD_S)
     ap.add_argument("--no-window", action="store_true", help="no display; print caption changes")
+    ap.add_argument("--no-speak", action="store_true", help="do not speak the captions")
     ap.add_argument("--mirror", action="store_true", help="flip the DISPLAY like a mirror (not the model input)")
     args = ap.parse_args()
 
     from src.classifier import Int8Classifier
     from src.landmarks import LandmarkExtractor, shrink
     from src.normalize import normalize
+    from speech import CaptionSpeaker
 
     is_file = not args.source.isdigit()
     cap = cv2.VideoCapture(args.source if is_file else int(args.source))
@@ -88,6 +95,9 @@ def main():
     clf = Int8Classifier(config.INT8_MODEL)
     extractor = LandmarkExtractor(config.HAND_MODEL, config.POSE_MODEL)
     caption = CaptionStabilizer(args.threshold, args.hold)
+    speaker = CaptionSpeaker() if config.SPEAK_CAPTIONS and not (args.no_speak or args.no_window) else None
+    if speaker is not None and not speaker.on:
+        print(f"speech off: {speaker.reason_off}")
     window = deque()                       # (time, hands, pose)
     last_classified, shown, n, fps = -1e9, None, 0, 0.0
     t_start = t_prev = time.perf_counter()
@@ -118,6 +128,8 @@ def main():
                 current = caption.update(word, conf, now)
                 if current != shown:
                     shown = current
+                    if shown and speaker is not None:
+                        speaker.say(shown)
                     print(f"[{now:6.2f}s] caption: {shown or '(none)'}"
                           + (f"  ({caption.confidence:.2f})" if shown else ""), flush=True)
 
@@ -130,6 +142,8 @@ def main():
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
     cap.release()
+    if speaker is not None:
+        speaker.close()
     if not args.no_window:
         cv2.destroyAllWindows()
     print(f"processed {n} frames in {time.perf_counter() - t_start:.1f}s")

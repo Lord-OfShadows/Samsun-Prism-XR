@@ -1,0 +1,154 @@
+{
+ "clips_scored": 258,
+ "errors": 45,
+ "errors_in_top_pairs": 12,
+ "distinct_error_pairs": 43,
+ "pairs": [
+  {
+   "word_a": "dog",
+   "word_b": "later",
+   "a_read_as_b": 1,
+   "b_read_as_a": 1,
+   "total": 2
+  },
+  {
+   "word_a": "no",
+   "word_b": "right",
+   "a_read_as_b": 1,
+   "b_read_as_a": 1,
+   "total": 2
+  },
+  {
+   "word_a": "accident",
+   "word_b": "wrong",
+   "a_read_as_b": 1,
+   "b_read_as_a": 0,
+   "total": 1
+  },
+  {
+   "word_a": "africa",
+   "word_b": "brown",
+   "a_read_as_b": 1,
+   "b_read_as_a": 0,
+   "total": 1
+  },
+  {
+   "word_a": "all",
+   "word_b": "but",
+   "a_read_as_b": 1,
+   "b_read_as_a": 0,
+   "total": 1
+  },
+  {
+   "word_a": "before",
+   "word_b": "cousin",
+   "a_read_as_b": 1,
+   "b_read_as_a": 0,
+   "total": 1
+  },
+  {
+   "word_a": "before",
+   "word_b": "enjoy",
+   "a_read_as_b": 1,
+   "b_read_as_a": 0,
+   "total": 1
+  },
+  {
+   "word_a": "before",
+   "word_b": "fish",
+   "a_read_as_b": 1,
+   "b_read_as_a": 0,
+   "total": 1
+  },
+  {
+   "word_a": "before",
+   "word_b": "last",
+   "a_read_as_b": 0,
+   "b_read_as_a": 1,
+   "total": 1
+  },
+  {
+   "word_a": "book",
+   "word_b": "school",
+   "a_read_as_b": 0,
+   "b_read_as_a": 1,
+   "total": 1
+  }
+ ],
+ "worst_words": [
+  {
+   "word": "right",
+   "correct": 0,
+   "clips": 2
+  },
+  {
+   "word": "school",
+   "correct": 0,
+   "clips": 2
+  },
+  {
+   "word": "before",
+   "correct": 1,
+   "clips": 4
+  },
+  {
+   "word": "fine",
+   "correct": 1,
+   "clips": 3
+  },
+  {
+   "word": "letter",
+   "correct": 1,
+   "clips": 3
+  },
+  {
+   "word": "pizza",
+   "correct": 1,
+   "clips": 3
+  },
+  {
+   "word": "thin",
+   "correct": 1,
+   "clips": 3
+  },
+  {
+   "word": "who",
+   "correct": 1,
+   "clips": 3
+  },
+  {
+   "word": "drink",
+   "correct": 2,
+   "clips": 4
+  },
+  {
+   "word": "cheat",
+   "correct": 1,
+   "clips": 2
+  }
+ ],
+ "most_frequent_wrong_guesses": [
+  {
+   "word": "fish",
+   "times": 3
+  },
+  {
+   "word": "but",
+   "times": 2
+  },
+  {
+   "word": "drink",
+   "times": 2
+  },
+  {
+   "word": "last",
+   "times": 2
+  },
+  {
+   "word": "letter",
+   "times": 2
+  }
+ ],
+ "words_never_wrong": 65,
+ "words_scored": 100
+}
