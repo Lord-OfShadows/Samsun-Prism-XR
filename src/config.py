@@ -42,6 +42,7 @@ LATENCY_METRIC_FOR_RESULTS = "end_to_end"
 # Live demo caption behaviour
 CAPTION_THRESHOLD = 0.6   # show a word only above this confidence
 CAPTION_HOLD_S = 1.5      # and keep it on screen at least this long
+SPEAK_CAPTIONS = True     # speak each new caption offline (demo/speech.py); --no-speak turns it off
 
 
 def load_vocab(path=None):
