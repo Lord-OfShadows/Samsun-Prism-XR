@@ -1,0 +1,35 @@
+{
+ "clips": 258,
+ "clean_top1": 0.8255813953488372,
+ "clean_top5": 0.9341085271317829,
+ "variants": {
+  "dark": {
+   "top1": 0.8023255813953488,
+   "top5": 0.8992248062015504,
+   "drop_points": 2.326
+  },
+  "rotated": {
+   "top1": 0.8217054263565892,
+   "top5": 0.9263565891472868,
+   "drop_points": 0.388
+  },
+  "occluded": {
+   "top1": 0.375968992248062,
+   "top5": 0.5310077519379846,
+   "drop_points": 44.961
+  },
+  "mirrored": {
+   "top1": 0.8255813953488372,
+   "top5": 0.9418604651162791,
+   "drop_points": 0.0
+  }
+ },
+ "settings": {
+  "dark_factor": 0.25,
+  "rotate_deg": 15.0,
+  "occlude_frac": 0.35
+ },
+ "extraction_errors": [],
+ "perturbed_mean_top1": 0.7063953488372093,
+ "drop_points": 11.919
+}

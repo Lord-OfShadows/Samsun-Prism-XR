@@ -179,7 +179,7 @@ Defaults: threshold 0.6, hold 1.5 s, in [`src/config.py`](src/config.py).
 | `top1_accuracy` | >= 70 % | 82.56 % | PASS |
 | `latency_p95` | <= 50 ms | 3407.89 ms | FAIL |
 | `model_size` | <= 25 MB | 15.42 MB | PASS |
-| `accuracy_drop_robustness` | <= 5 points | not measured | not measured |
+| `accuracy_drop_robustness` | <= 5 points | 11.92 points | FAIL |
 | `avg_power` | <= 500 mW | not measured | not measured |
 | `thermal_drift_10min` | <= 20 % | not measured | not measured |
 
@@ -188,7 +188,7 @@ Notes per row:
 - `top1_accuracy`: INT8 model via predict() on all 258 clips of the WLASL100 test split; top-5 = 93.41 %
 - `latency_p95`: value = whole clip incl. landmarks (config.LATENCY_METRIC_FOR_RESULTS). All p95 over 200 runs: classifier call 2.38 ms; landmarks per frame 66.61 ms; whole clip 3407.89 ms (55 frames). Device: 12th Gen Intel(R) Core(TM) i7-12650H, LiteRT (ai-edge-litert 2.3.0), CPU, XNNPACK delegate
 - `model_size`: sum of every model file loaded (classifier_int8 1.82; mediapipe_hand_landmarker 7.82; mediapipe_pose_landmarker_lite 5.78); pass is judged against our stricter 20 MB design budget
-- `accuracy_drop_robustness`: run python -m src.robustness (needs the dataset)
+- `accuracy_drop_robustness`: clean 82.56 % minus mean of perturbed sets 70.64 % (dark 80.23 %; rotated 82.17 %; occluded 37.60 %; mirrored 82.56 %); 258 test clips each
 - `avg_power`: needs an on-phone run (Android stretch goal not built); not estimated
 - `thermal_drift_10min`: needs an on-phone run (Android stretch goal not built); not estimated
 
@@ -234,9 +234,18 @@ The brief does not say whether its 50 ms ceiling means one classifier call, one 
 
 Budget 20 MB: within budget. MB = 1,000,000 bytes.
 
-### Robustness
+### Robustness (`outputs/robustness.json`)
 
-Not measured yet: run `python -m src.robustness`.
+The pixels of all 258 test clips are damaged, MediaPipe is re-run, and the INT8 model classifies the result.
+
+| Test set | Top-1 | Top-5 | Drop in top-1 (points) |
+|---|---|---|---|
+| Clean | 82.56 % | 93.41 % | |
+| Dark (brightness x0.25) | 80.23 % | 89.92 % | 2.33 |
+| Rotated (15 degrees) | 82.17 % | 92.64 % | 0.39 |
+| Occluded (box over 35% x 35% of the frame) | 37.60 % | 53.10 % | 44.96 |
+| Mirrored (left-right flip) | 82.56 % | 94.19 % | 0.00 |
+| **Mean of the four** | **70.64 %** | | **11.92** |
 
 ### Not measured
 
