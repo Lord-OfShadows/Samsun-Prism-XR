@@ -92,8 +92,36 @@ def hand_dropout(hands, rng, p=0.25, min_frac=0.1, max_frac=0.5):
     return hands
 
 
-def augment(hands, pose, width, height, rng):
-    """The full training augmentation for one clip."""
+def box_occlusion(hands, width, height, rng, min_frac=0.2, max_frac=0.45, cover=0.3):
+    """An object held in front of the signing area for the WHOLE clip.
+
+    Why: hand_dropout() hides a hand for part of the clip, but real occlusion (and our
+    robustness test) can hide a hand for the entire sign. A box is placed in image pixels
+    and, in every frame, a hand is removed if at least `cover` of its 21 points are inside
+    it, because MediaPipe usually loses a hand that is partly hidden. The pose points are
+    left alone: the pose model still estimates arms behind an occluder.
+    Box size and position are drawn from WIDER ranges than the robustness test uses
+    (test: fixed 35%, centre x 0.3-0.7, y 0.35-0.75), so training does not copy the test.
+    """
+    f = rng.uniform(min_frac, max_frac)
+    bw, bh = f * width, f * height
+    cx, cy = rng.uniform(0.2, 0.8) * width, rng.uniform(0.25, 0.85) * height
+    x0 = float(np.clip(cx - bw / 2, 0, width - bw))
+    y0 = float(np.clip(cy - bh / 2, 0, height - bh))
+    x, y = hands[..., 0], hands[..., 1]                       # (T, 2, 21); NaN compares False
+    inside = (x >= x0) & (x < x0 + bw) & (y >= y0) & (y < y0 + bh)
+    hands = hands.copy()
+    hands[inside.mean(axis=-1) >= cover] = np.nan             # (T, 2) mask over whole hands
+    return hands
+
+
+def augment(hands, pose, width, height, rng, occlusion_p=0.0):
+    """The full training augmentation for one clip.
+    occlusion_p: probability of box_occlusion(); 0 reproduces the original training."""
+    # first, in camera pixels, before any geometric change. The `> 0` check means
+    # occlusion_p=0 draws no random number, so the original 19 Nov run reproduces exactly.
+    if occlusion_p > 0 and rng.random() < occlusion_p:
+        hands = box_occlusion(hands, width, height, rng)
     hands, pose = time_warp(hands, pose, rng)
     hands, pose = drop_frames(hands, pose, rng)
     if rng.random() < 0.5:

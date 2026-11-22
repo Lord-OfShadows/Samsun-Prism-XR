@@ -35,7 +35,7 @@ def _one(job):
         rec["clip_id"] = video_id            # manifest id, keeps leading zeros
         return rec
     except Exception as e:  # noqa: BLE001
-        return {"clip_id": video_id, "prediction": None, "confidence": 0.0, "top5": [],
+        return {"clip_id": video_id, "prediction": None, "top5": [], "confidence": 0.0, "latency_ms": None,
                 "error": f"{type(e).__name__}: {e}"[:200]}
 
 

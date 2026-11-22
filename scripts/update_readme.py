@@ -35,10 +35,13 @@ def results_table():
     out = ["### Organisers' results table (`outputs/results.csv`)", "",
            "| Metric | Target | Measured | Pass |", "|---|---|---|---|"]
     for r in rows:
-        value = r["value"] if r["value"] == "not measured" else f"{r['value']} {r['unit']}"
+        value = r["measured"] if r["measured"] == "not measured" else f"{r['measured']} {r['unit']}"
         out.append(f"| `{r['metric']}` | {r['target']} | {value} | {r['pass']} |")
     out += ["", "Notes per row:", ""]
-    out += [f"- `{r['metric']}`: {r['notes']}" for r in rows]
+    notes_path = config.OUTPUT_DIR / "results_notes.csv"
+    if notes_path.exists():
+        notes = list(csv.DictReader(open(notes_path, encoding="utf-8")))
+        out += [f"- `{r['metric']}`: {r['notes']}" for r in notes]
     return out
 
 

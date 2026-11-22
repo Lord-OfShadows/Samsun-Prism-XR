@@ -22,22 +22,22 @@ def _probs(top=7):
     return p
 
 
-def test_schema_and_types():
+def test_schema_matches_the_brief_exactly():
     out = format_output("00618", _probs(), VOCAB, MS, 64)
-    assert set(out) == {"clip_id", "prediction", "confidence", "top5", "latency_ms", "frames"}
-    assert out["clip_id"] == "00618" and out["prediction"] == "word7" and out["frames"] == 64
+    # same keys, same order as the brief's example
+    assert list(out) == ["clip_id", "prediction", "top5", "confidence", "latency_ms"]
+    assert out["clip_id"] == "00618" and out["prediction"] == "WORD7"
     assert isinstance(out["confidence"], float) and abs(out["confidence"] - 0.6) < 1e-4
-    assert set(out["latency_ms"]) == {"decode", "landmarks", "normalize", "classifier", "total"}
+    assert isinstance(out["latency_ms"], float) and out["latency_ms"] == 3.75
 
 
 def test_top5_is_sorted_and_consistent_with_prediction():
     out = format_output("x", _probs(), VOCAB, MS, 64)
-    words = [t["word"] for t in out["top5"]]
-    confs = [t["confidence"] for t in out["top5"]]
+    words = out["top5"]
+    assert all(isinstance(w, str) for w in words)
     assert len(words) == 5 and len(set(words)) == 5
-    assert words[:3] == ["word7", "word3", "word50"]
-    assert confs == sorted(confs, reverse=True)
-    assert out["top5"][0] == {"word": out["prediction"], "confidence": out["confidence"]}
+    assert words[:3] == ["WORD7", "WORD3", "WORD50"]
+    assert words[0] == out["prediction"]
 
 
 def test_output_is_plain_json():
@@ -48,13 +48,19 @@ def test_output_is_plain_json():
 def test_scoring_counts_missing_and_failed_clips_as_wrong():
     from make_results import score_predictions
     lines = [
-        {"clip_id": "a", "prediction": "word1", "top5": [{"word": "word1"}]},              # right
-        {"clip_id": "b", "prediction": "word9", "top5": [{"word": "word9"}, {"word": "word2"}]},  # top5 only
+        {"clip_id": "a", "prediction": "WORD1", "top5": ["WORD1"]},                         # right
+        {"clip_id": "b", "prediction": "WORD9", "top5": ["WORD9", "WORD2"]},                # top5 only
         {"clip_id": "c", "prediction": None, "top5": []},                                  # failed clip
     ]
     labels = {"a": 1, "b": 2, "c": 3, "d": 4}                                              # d is absent
     top1, top5, n = score_predictions(lines, labels, VOCAB)
     assert (top1, top5, n) == (0.25, 0.5, 4)
+
+
+def test_scoring_still_reads_old_dict_style_top5():
+    from make_results import score_predictions
+    lines = [{"clip_id": "a", "prediction": "word1", "top5": [{"word": "word1"}]}]
+    assert score_predictions(lines, {"a": 1}, VOCAB) == (1.0, 1.0, 1)
 
 
 def test_results_csv_has_six_rows_and_never_invents_phone_numbers(tmp_path, monkeypatch):
@@ -65,7 +71,8 @@ def test_results_csv_has_six_rows_and_never_invents_phone_numbers(tmp_path, monk
     rows = list(csv.DictReader(open(tmp_path / "results.csv", encoding="utf-8")))
     assert [r["metric"] for r in rows] == ["top1_accuracy", "latency_p95", "model_size",
                                            "accuracy_drop_robustness", "avg_power", "thermal_drift_10min"]
-    assert all(r["value"] == "not measured" and r["pass"] == "not measured" for r in rows)
+    assert list(rows[0]) == ["metric", "target", "measured", "unit", "device", "runtime", "pass"]
+    assert all(r["measured"] == "not measured" and r["pass"] == "not measured" for r in rows)
 
 
 def test_caption_needs_confidence_and_holds():

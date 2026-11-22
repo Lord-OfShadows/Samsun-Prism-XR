@@ -25,8 +25,9 @@ from src.model import build_model
 from src.normalize import normalize
 
 
-def augmented_features(raws, rng):
-    return np.stack([normalize(*augment(r["hands"], r["pose"], r["width"], r["height"], rng), r["width"])
+def augmented_features(raws, rng, occlusion_p=0.0):
+    return np.stack([normalize(*augment(r["hands"], r["pose"], r["width"], r["height"], rng,
+                                        occlusion_p=occlusion_p), r["width"])
                      for r in raws])
 
 
@@ -44,6 +45,8 @@ def main():
     ap.add_argument("--weight-decay", type=float, default=0.02)
     ap.add_argument("--label-smoothing", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--occlusion-p", type=float, default=config.OCCLUSION_AUG_P,
+                    help="probability of whole-clip box occlusion per training clip (0 = original)")
     ap.add_argument("--out", default=str(config.FLOAT_MODEL))
     args = ap.parse_args()
 
@@ -74,7 +77,7 @@ def main():
     best = {"val_top1": -1.0, "epoch": 0}
     best_weights, history, t0 = None, [], time.perf_counter()
     for epoch in range(1, args.epochs + 1):
-        x_train = augmented_features(train_raw, rng)
+        x_train = augmented_features(train_raw, rng, args.occlusion_p)
         h = model.fit(x_train, y_train_1h, batch_size=args.batch, shuffle=True,
                       initial_epoch=epoch - 1, epochs=epoch, verbose=0).history
         pv = model.predict(x_val, batch_size=256, verbose=0)
