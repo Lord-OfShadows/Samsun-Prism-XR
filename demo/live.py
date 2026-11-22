@@ -4,6 +4,7 @@
   python demo/live.py --source clip.mp4     # play a file through the same loop
   python demo/live.py --source clip.mp4 --no-window   # headless, prints captions (for testing)
   python demo/live.py --no-speak            # captions on screen only, no voice
+  python demo/live.py --record demo.mp4     # also save the captioned video (picture only, no sound)
 
 How it works: the newest ~2.5 seconds of landmarks are kept in a sliding window. A few
 times per second the window is normalised exactly like a training clip and classified by
@@ -70,6 +71,35 @@ def draw_caption(frame, word, confidence, fps):
     return frame
 
 
+class RealTimeWriter:
+    """Saves the captioned frames to an .mp4 that plays back at real speed.
+
+    The live loop runs slower than the camera (MediaPipe takes most of each frame), so
+    frames arrive unevenly. Each frame is written as many times as needed to fill the
+    output slots up to its timestamp, so one second of signing is one second of video.
+    For a file source the timestamps are the file's own, so every frame is written once.
+    """
+
+    def __init__(self, path, fps):
+        self.path, self.fps, self.out, self.n = str(path), fps, None, 0
+
+    def write(self, frame, now):
+        if self.out is None:
+            h, w = frame.shape[:2]
+            self.out = cv2.VideoWriter(self.path, cv2.VideoWriter_fourcc(*"mp4v"), self.fps, (w, h))
+            if not self.out.isOpened():
+                sys.exit(f"cannot write video to {self.path!r}")
+        target = int(now * self.fps) + 1
+        while self.n < target:
+            self.out.write(frame)
+            self.n += 1
+
+    def close(self):
+        if self.out is not None:
+            self.out.release()
+            print(f"saved {self.n / self.fps:.1f} s of video to {self.path} (no sound: the voice is not recorded)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default="0", help="webcam index or a video file")
@@ -78,6 +108,7 @@ def main():
     ap.add_argument("--no-window", action="store_true", help="no display; print caption changes")
     ap.add_argument("--no-speak", action="store_true", help="do not speak the captions")
     ap.add_argument("--mirror", action="store_true", help="flip the DISPLAY like a mirror (not the model input)")
+    ap.add_argument("--record", metavar="OUT.mp4", help="also save the captioned video to this file")
     args = ap.parse_args()
 
     from src.classifier import Int8Classifier
@@ -90,6 +121,7 @@ def main():
     if not cap.isOpened():
         sys.exit(f"cannot open video source {args.source!r}")
     file_fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    writer = RealTimeWriter(args.record, file_fps if is_file else 30.0) if args.record else None
 
     vocab = config.load_vocab()
     clf = Int8Classifier(config.INT8_MODEL)
@@ -136,12 +168,18 @@ def main():
             t = time.perf_counter()
             fps = 0.9 * fps + 0.1 / max(t - t_prev, 1e-6) if fps else 1 / max(t - t_prev, 1e-6)
             t_prev = t
-            if not args.no_window:
+            if writer is not None or not args.no_window:
                 view = cv2.flip(frame, 1) if args.mirror else frame
-                cv2.imshow("EchoGesture (q to quit)", draw_caption(view, caption.word, caption.confidence, fps))
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
+                view = draw_caption(view, caption.word, caption.confidence, fps)
+                if writer is not None:
+                    writer.write(view, now)
+                if not args.no_window:
+                    cv2.imshow("EchoGesture (q to quit)", view)
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        break
     cap.release()
+    if writer is not None:
+        writer.close()
     if speaker is not None:
         speaker.close()
     if not args.no_window:
