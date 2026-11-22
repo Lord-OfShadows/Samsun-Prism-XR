@@ -10,7 +10,9 @@ avg_power and thermal_drift_10min need an on-phone measurement we do not have. T
 written as "not measured", never estimated. Any row whose input file is missing is also
 "not measured", with the script to run in the notes.
 
-Columns: metric, target, value, unit, pass, notes.   pass is PASS / FAIL / not measured.
+results.csv columns are the organisers' exactly: metric, target, measured, unit, device,
+runtime, pass (pass is PASS / FAIL / not measured). The explanation of each row goes to
+outputs/results_notes.csv (metric, notes), which update_readme.py puts in the README.
 """
 import csv
 import json
@@ -21,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src import config  # noqa: E402
 
 NOT_MEASURED = "not measured"
-FIELDS = ["metric", "target", "value", "unit", "pass", "notes"]
+FIELDS = ["metric", "target", "measured", "unit", "device", "runtime", "pass"]   # organisers' schema
 
 
 def _json(name):
@@ -39,8 +41,11 @@ def score_predictions(lines, labels, vocab):
         r, word = by_id.get(clip_id), vocab[label]
         if not r or not r.get("prediction"):
             continue
-        hit1 += r["prediction"] == word
-        hit5 += word in [t["word"] for t in r.get("top5", [])]
+        # case-insensitive: vocab.txt is lower-case, predict() returns upper-case words.
+        # top5 entries may be plain words (current schema) or {"word": ...} (old files).
+        top5 = [(t["word"] if isinstance(t, dict) else t).lower() for t in r.get("top5", [])]
+        hit1 += r["prediction"].lower() == word.lower()
+        hit5 += word.lower() in top5
     n = len(labels)
     return hit1 / n, hit5 / n, n
 
@@ -111,13 +116,24 @@ def main():
     rows = [accuracy_row(), latency_row(bench), size_row(bench), robustness_row(rob),
             ["avg_power", "<= 500 mW", NOT_MEASURED, "mW", NOT_MEASURED, phone],
             ["thermal_drift_10min", "<= 20 %", NOT_MEASURED, "%", NOT_MEASURED, phone]]
+    # rows are built as [metric, target, value, unit, pass, notes]; split into the two files
+    dev = (bench or {}).get("device", {})
+    device = f"{dev['cpu']} ({dev['os']})" if dev else NOT_MEASURED
+    runtime = dev.get("runtime", NOT_MEASURED)
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out = config.OUTPUT_DIR / "results.csv"
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(FIELDS)
-        w.writerows(rows)
-    print(f"wrote {out}\n")
+        for m, target, value, unit, ok, _ in rows:
+            on_phone = m in ("avg_power", "thermal_drift_10min")
+            w.writerow([m, target, value, unit, NOT_MEASURED if on_phone else device,
+                        NOT_MEASURED if on_phone else runtime, ok])
+    with open(config.OUTPUT_DIR / "results_notes.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["metric", "notes"])
+        w.writerows([[r[0], r[5]] for r in rows])
+    print(f"wrote {out} and results_notes.csv\n")
     for r in rows:
         print(f"{r[0]:26s} {r[2]:>13s} {r[3]:7s} target {r[1]:12s} {r[4]}")
 

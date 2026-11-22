@@ -36,7 +36,8 @@ def load_predictions(path):
         for line in f:
             if line.strip():
                 r = json.loads(line)
-                out[r["clip_id"]] = r["prediction"]
+                # predict() returns upper-case words; vocab.txt is lower-case
+                out[r["clip_id"]] = r["prediction"].lower() if r["prediction"] else None
     return out
 
 

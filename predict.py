@@ -40,16 +40,20 @@ def _load():
     return _pipeline
 
 
-def format_output(clip_id, probs, vocab, latency_ms, n_frames):
-    """THE output schema. Change only this function if the organisers' format differs."""
+def format_output(clip_id, probs, vocab, latency_ms, n_frames=None):
+    """THE output schema, exactly the brief's example:
+    {"clip_id": "test_0412", "prediction": "HAPPY", "top5": ["HAPPY", ...],
+     "confidence": 0.81, "latency_ms": 23.4}
+    Words are upper-case because the brief's example is. latency_ms is the total for this
+    call; the per-stage split is measured by src/benchmark.py, not returned here, so the
+    evaluator gets no keys it did not ask for. n_frames is accepted but not returned."""
     order = np.argsort(-probs)[:5]
     return {
         "clip_id": clip_id,
-        "prediction": vocab[int(order[0])],
+        "prediction": vocab[int(order[0])].upper(),
+        "top5": [vocab[int(i)].upper() for i in order],
         "confidence": round(float(probs[order[0]]), 4),
-        "top5": [{"word": vocab[int(i)], "confidence": round(float(probs[i]), 4)} for i in order],
-        "latency_ms": {k: round(float(v), 2) for k, v in latency_ms.items()},
-        "frames": int(n_frames),
+        "latency_ms": round(float(latency_ms["total"]), 2),
     }
 
 

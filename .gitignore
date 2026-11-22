@@ -1,5 +1,6 @@
 data/
-models/mediapipe/
+models/mediapipe/*
+!models/mediapipe/*.task
 __pycache__/
 .venv/
 *.pyc

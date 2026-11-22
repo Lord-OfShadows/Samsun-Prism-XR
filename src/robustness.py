@@ -2,6 +2,9 @@
 
   python -m src.robustness                # all test clips, 4 variants
   python -m src.robustness --limit 20     # quick check
+  python -m src.robustness --split val --variants occluded
+        # occluded VALIDATION set, for choosing between training setups. The test set is
+        # then only used for the final number, as with clean accuracy.
 
 For every test clip we damage the PIXELS, re-run MediaPipe on the damaged frames, and
 classify with the INT8 model. Perturbing pixels (not landmarks) is the honest test: it
@@ -121,23 +124,27 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, help="only the first N test clips (quick check)")
     ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--split", default="test", choices=["test", "val"])
+    ap.add_argument("--variants", nargs="+", default=list(VARIANTS), choices=VARIANTS)
     args = ap.parse_args()
+    # test keeps its original cache folder; other splits get their own sub-folder
+    base = config.ROBUSTNESS_DIR if args.split == "test" else config.ROBUSTNESS_DIR / args.split
 
     from src.classifier import Int8Classifier
     from src.data import load_manifest, load_raw
 
     df = load_manifest()
-    df = df[(df.split == "test") & df.status.isin(["ok", "no_hands"])].sort_values("video_id")
+    df = df[(df.split == args.split) & df.status.isin(["ok", "no_hands"])].sort_values("video_id")
     if args.limit:
         df = df.head(args.limit)
     labels = df.label.to_numpy()
 
     jobs = []
-    for v in VARIANTS:
-        (config.ROBUSTNESS_DIR / v).mkdir(parents=True, exist_ok=True)
+    for v in args.variants:
+        (base / v).mkdir(parents=True, exist_ok=True)
         jobs += [dict(video_id=r.video_id, variant=v, path=r.path,
                       clean=str(config.LANDMARK_DIR / f"{r.video_id}.npz"),
-                      out=str(config.ROBUSTNESS_DIR / v / f"{r.video_id}.npz")) for r in df.itertuples()]
+                      out=str(base / v / f"{r.video_id}.npz")) for r in df.itertuples()]
     errors = []
     with Pool(args.workers, initializer=_init_worker) as pool:
         for i, (vid, v, err) in enumerate(pool.imap_unordered(_process, jobs, chunksize=1), 1):
@@ -153,11 +160,11 @@ def main():
                            "occlude_frac": OCCLUDE_FRAC}, "extraction_errors": errors}
     print(f"\n{'set':10s} {'top1':>7s} {'top5':>7s} {'drop':>7s}")
     print(f"{'clean':10s} {100 * clean1:7.2f} {100 * clean5:7.2f}")
-    for v in VARIANTS:
+    for v in args.variants:
         raws = []
         for vid in df.video_id:
-            p = config.ROBUSTNESS_DIR / v / f"{vid}.npz"
-            raws.append(load_raw(vid, config.ROBUSTNESS_DIR / v) if p.exists() else None)
+            p = base / v / f"{vid}.npz"
+            raws.append(load_raw(vid, base / v) if p.exists() else None)
         t1, t5 = accuracy(clf, raws, labels)
         result["variants"][v] = {"top1": t1, "top5": t5, "drop_points": round(100 * (clean1 - t1), 3)}
         print(f"{v:10s} {100 * t1:7.2f} {100 * t5:7.2f} {100 * (clean1 - t1):7.2f}")
@@ -168,10 +175,12 @@ def main():
     if errors:
         print(f"{len(errors)} perturbed clips failed extraction and were scored as misses")
 
-    if not args.limit:      # a partial run must not overwrite the real result
+    full = not args.limit and list(args.variants) == list(VARIANTS)
+    if full:                # a partial run must not overwrite the real result
+        name = "robustness.json" if args.split == "test" else f"robustness_{args.split}.json"
         config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        (config.OUTPUT_DIR / "robustness.json").write_text(json.dumps(result, indent=1))
-        print(f"wrote {config.OUTPUT_DIR / 'robustness.json'}")
+        (config.OUTPUT_DIR / name).write_text(json.dumps(result, indent=1))
+        print(f"wrote {config.OUTPUT_DIR / name}")
 
 
 if __name__ == "__main__":

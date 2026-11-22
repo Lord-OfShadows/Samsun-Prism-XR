@@ -20,6 +20,9 @@ VIDEO_DIR = WLASL_DIR / "videos"              # <video_id>.mp4
 LANDMARK_DIR = ROOT / "data" / "landmarks"   # one .npz per clip
 MANIFEST_PATH = ROOT / "data" / "manifest.csv"
 ROBUSTNESS_DIR = ROOT / "data" / "robustness"  # cached landmarks of perturbed test clips
+# Probability that a training clip gets box_occlusion() (src/augment.py). 0.0 = the
+# original 19 Nov model. Set to the value the frozen model was trained with.
+OCCLUSION_AUG_P = 0.0
 
 MODELS_DIR = ROOT / "models"
 FLOAT_MODEL = MODELS_DIR / "echogesture_float.keras"   # what train.py saves
@@ -37,7 +40,9 @@ LATENCY_BUDGET_MS = 50.0
 # Which measured latency goes in the single latency_p95 row of results.csv:
 # "end_to_end" (whole clip incl. landmarks, the strictest reading), "per_frame" or "classifier".
 # All three are always measured and written to outputs/benchmark.json and the notes column.
-LATENCY_METRIC_FOR_RESULTS = "end_to_end"
+# "classifier": the official matrix says "inference time < 50 ms". Per-frame and whole-clip
+# p95 are still measured and shown in the README (results_notes.csv).
+LATENCY_METRIC_FOR_RESULTS = "classifier"
 
 # Live demo caption behaviour
 CAPTION_THRESHOLD = 0.6   # show a word only above this confidence
